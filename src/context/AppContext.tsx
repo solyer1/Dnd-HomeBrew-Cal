@@ -2,8 +2,8 @@
 
 /**
  * AppContext
- * Global state provider for crit table, app settings, and roll history.
- * All state that must be shared across the Damage Calculator and Dice Roller.
+ * Global state provider for crit table, app settings, roll history,
+ * and cross-tab communication (send dice value to calculator).
  */
 
 import React, {
@@ -34,6 +34,11 @@ interface AppContextValue {
   rollHistory: RollHistoryEntry[];
   addToHistory: (label: string, result: RollResult) => void;
   clearHistory: () => void;
+
+  // Cross-tab: last dice grand total sent to the calculator
+  pendingDice: { value: number; target: 'base' | 'attack' } | null;
+  sendDiceToCalculator: (value: number, target: 'base' | 'attack') => void;
+  consumePendingDice: () => void;
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -42,6 +47,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [critTable, setCritTable] = useState<CritTableEntry[]>(DEFAULT_CRIT_TABLE);
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_APP_SETTINGS);
   const [rollHistory, setRollHistory] = useState<RollHistoryEntry[]>([]);
+  const [pendingDice, setPendingDice] = useState<{ value: number; target: 'base' | 'attack' } | null>(null);
 
   const updateSettings = useCallback((partial: Partial<AppSettings>) => {
     setSettings((prev) => ({ ...prev, ...partial }));
@@ -59,6 +65,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const clearHistory = useCallback(() => setRollHistory([]), []);
 
+  const sendDiceToCalculator = useCallback((value: number, target: 'base' | 'attack') => {
+    setPendingDice({ value, target });
+  }, []);
+
+  const consumePendingDice = useCallback(() => {
+    setPendingDice(null);
+  }, []);
+
   return (
     <AppContext.Provider
       value={{
@@ -69,6 +83,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
         rollHistory,
         addToHistory,
         clearHistory,
+        pendingDice,
+        sendDiceToCalculator,
+        consumePendingDice,
       }}
     >
       {children}

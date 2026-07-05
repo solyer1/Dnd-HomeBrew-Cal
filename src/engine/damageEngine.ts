@@ -23,6 +23,7 @@ import type {
   DamageResult,
   DamageStep,
   ResistanceState,
+  PartitionBreakdown
 } from '@/types/damage';
 import { roundTo, formatMultiplier, formatSigned } from '@/utils/math';
 
@@ -60,12 +61,19 @@ export function getCritMultiplier(
 export function getResistanceMultiplier(
   state: ResistanceState,
   vulnerabilityStacks: number,
+  resistanceStacks: number = 1
 ): { multiplier: number; label: string } {
   switch (state) {
     case 'immunity':
       return { multiplier: 0, label: 'Immune (×0)' };
-    case 'resistance':
-      return { multiplier: 0.5, label: 'Resistance (÷2)' };
+    case 'resistance': {
+      const stacks = Math.max(1, resistanceStacks);
+      const multiplier = 1 / Math.pow(2, stacks);
+      return {
+        multiplier,
+        label: `Resistance ×${stacks} stack${stacks > 1 ? 's' : ''} (÷${Math.pow(2, stacks)})`,
+      };
+    }
     case 'vulnerability': {
       const stacks = Math.max(1, vulnerabilityStacks);
       const multiplier = Math.pow(2, stacks);
@@ -113,21 +121,44 @@ export function calculateDamage(
     detail: `${baseDamage} × ${critMultiplier} — ${critLabel} (Roll: ${input.attackRoll})`,
   });
 
-  // Step 3 — Resistance / Vulnerability / Immunity
-  const { multiplier: resistMultiplier, label: resistLabel } =
-    getResistanceMultiplier(input.resistanceState, input.vulnerabilityStacks);
-  const isImmune = input.resistanceState === 'immunity';
-  const afterResistance = isImmune ? 0 : afterCrit * resistMultiplier;
+  // Step 3 — Partitions & Resistance
+  const partitionBreakdowns: PartitionBreakdown[] = [];
+  let totalAfterResistance = 0;
+
+  input.damagePartitions.forEach((partition) => {
+    // True damage normally ignores resistance, but we rely on user input (default resistance state)
+    // If they set it to resistance, it will resist. By default they should set it to 'none'.
+    const allocated = afterCrit * (partition.percentage / 100);
+    const { multiplier: resMult, label: resLabel } = getResistanceMultiplier(
+      partition.resistanceState,
+      partition.vulnerabilityStacks,
+      partition.resistanceStacks
+    );
+    const isImmune = partition.resistanceState === 'immunity';
+    const afterResist = isImmune ? 0 : allocated * resMult;
+    
+    partitionBreakdowns.push({
+      partition,
+      allocatedDamage: allocated,
+      resistanceMultiplier: resMult,
+      afterResistance: afterResist,
+      isImmune,
+    });
+    totalAfterResistance += afterResist;
+  });
+
   steps.push({
-    label: 'Resistance / Vulnerability',
-    value: afterResistance,
-    detail: resistLabel,
+    label: 'Damage Distribution & Resistance',
+    value: totalAfterResistance,
+    detail: input.damagePartitions
+      .map((p, i) => `${p.percentage}% ${p.damageType} → ${roundTo(partitionBreakdowns[i].afterResistance, 1)}`)
+      .join(' | '),
   });
 
   // Step 4 — Flat Modifiers (user-defined +damage)
   const flatModifiers = input.modifiers.filter((m) => m.type === 'flat');
   const flatModifiersTotal = flatModifiers.reduce((sum, m) => sum + m.value, 0);
-  const afterFlatModifiers = afterResistance + flatModifiersTotal;
+  const afterFlatModifiers = totalAfterResistance + flatModifiersTotal;
   if (flatModifiers.length > 0) {
     steps.push({
       label: 'Flat Modifiers',
@@ -161,25 +192,24 @@ export function calculateDamage(
   }
 
   // Step 6 — Final Damage (rounded)
-  const finalDamage = isImmune ? 0 : Math.round(afterPercentageModifiers);
+  const finalDamage = Math.round(afterPercentageModifiers);
   steps.push({
     label: 'Final Damage',
     value: finalDamage,
-    detail: isImmune ? 'IMMUNE — no damage taken' : `Rounded to nearest integer`,
+    detail: `Rounded to nearest integer`,
   });
 
   const breakdown: DamageBreakdown = {
     baseDamage,
     critMultiplier,
     afterCrit: roundTo(afterCrit, 2),
-    resistanceMultiplier: resistMultiplier,
-    afterResistance: roundTo(afterResistance, 2),
+    partitionBreakdowns,
+    totalAfterResistance: roundTo(totalAfterResistance, 2),
     flatModifiersTotal,
     afterFlatModifiers: roundTo(afterFlatModifiers, 2),
     percentageModifiersTotal,
     afterPercentageModifiers: roundTo(afterPercentageModifiers, 2),
     finalDamage,
-    isImmune,
     isCrit,
     steps,
   };

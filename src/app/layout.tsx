@@ -29,7 +29,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`${cinzel.variable} ${inter.variable}`}>
+    <html lang="en" className={`${cinzel.variable} ${inter.variable}`} suppressHydrationWarning>
       <body className="antialiased">
         <AppProvider>
           {children}

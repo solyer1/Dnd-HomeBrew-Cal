@@ -4,33 +4,35 @@
 /* ─── CSS Custom Properties ──────────────────────────────────────────────── */
 :root {
   /* Colors */
-  --color-bg:        #0a0a12;
-  --color-surface:   #13131f;
-  --color-surface2:  #1a1a2e;
-  --color-border:    #2a2a3e;
-  --color-muted:     #6b6b8a;
-  --color-text:      #e8e8f0;
+  --color-bg: #0a0a12;
+  --color-surface: #13131f;
+  --color-surface2: #1a1a2e;
+  --color-border: #2a2a3e;
+  --color-muted: #6b6b8a;
+  --color-text: #e8e8f0;
 
   /* Gold palette */
-  --color-gold-300:  #fde68a;
-  --color-gold-400:  #e8c96a;
-  --color-gold-500:  #c9a84c;
-  --color-gold-600:  #a07830;
-  --color-gold-700:  #7a5820;
-  --color-gold-900:  #2d1f08;
-  --color-gold-950:  #1a1005;
+  --color-gold-300: #fde68a;
+  --color-gold-400: #e8c96a;
+  --color-gold-500: #c9a84c;
+  --color-gold-600: #a07830;
+  --color-gold-700: #7a5820;
+  --color-gold-900: #2d1f08;
+  --color-gold-950: #1a1005;
 
   /* Semantic */
   --font-display: 'Cinzel', Georgia, serif;
-  --font-body:    'Inter', system-ui, sans-serif;
+  --font-body: 'Inter', system-ui, sans-serif;
 
   /* Shadows */
   --shadow-gold: 0 0 20px rgba(201, 168, 76, 0.4), 0 0 40px rgba(201, 168, 76, 0.15);
-  --shadow-red:  0 0 20px rgba(220, 38, 38, 0.4);
+  --shadow-red: 0 0 20px rgba(220, 38, 38, 0.4);
 }
 
 /* ─── Base ────────────────────────────────────────────────────────────────── */
-*, *::before, *::after {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
 }
 
@@ -58,45 +60,105 @@ body {
   width: 6px;
   height: 6px;
 }
+
 ::-webkit-scrollbar-track {
   background: var(--color-surface);
 }
+
 ::-webkit-scrollbar-thumb {
   background: var(--color-border);
   border-radius: 3px;
 }
+
 ::-webkit-scrollbar-thumb:hover {
   background: var(--color-gold-700);
 }
 
 /* ─── Tailwind Utilities ──────────────────────────────────────────────────── */
 @layer utilities {
-  .text-gold-300  { color: var(--color-gold-300); }
-  .text-gold-400  { color: var(--color-gold-400); }
-  .text-gold-500  { color: var(--color-gold-500); }
-  .text-gold-600  { color: var(--color-gold-600); }
-  .text-muted     { color: var(--color-muted); }
-  .text-white     { color: var(--color-text); }
+  .text-gold-300 {
+    color: var(--color-gold-300);
+  }
 
-  .bg-bg          { background-color: var(--color-bg); }
-  .bg-surface     { background-color: var(--color-surface); }
-  .bg-surface2    { background-color: var(--color-surface2); }
-  .bg-gold-900    { background-color: var(--color-gold-900); }
-  .bg-gold-950    { background-color: var(--color-gold-950); }
+  .text-gold-400 {
+    color: var(--color-gold-400);
+  }
 
-  .border-border  { border-color: var(--color-border); }
-  .border-gold-400{ border-color: var(--color-gold-400); }
-  .border-gold-500{ border-color: var(--color-gold-500); }
-  .border-gold-600{ border-color: var(--color-gold-600); }
-  .border-gold-700{ border-color: var(--color-gold-700); }
+  .text-gold-500 {
+    color: var(--color-gold-500);
+  }
 
-  .shadow-gold    { box-shadow: var(--shadow-gold); }
-  .shadow-red     { box-shadow: var(--shadow-red); }
+  .text-gold-600 {
+    color: var(--color-gold-600);
+  }
 
-  .accent-gold    { accent-color: var(--color-gold-500); }
-  .accent-red     { accent-color: #dc2626; }
+  .text-muted {
+    color: var(--color-muted);
+  }
 
-  .scrollbar-thin { scrollbar-width: thin; }
+  .text-white {
+    color: var(--color-text);
+  }
+
+  .bg-bg {
+    background-color: var(--color-bg);
+  }
+
+  .bg-surface {
+    background-color: var(--color-surface);
+  }
+
+  .bg-surface2 {
+    background-color: var(--color-surface2);
+  }
+
+  .bg-gold-900 {
+    background-color: var(--color-gold-900);
+  }
+
+  .bg-gold-950 {
+    background-color: var(--color-gold-950);
+  }
+
+  .border-border {
+    border-color: var(--color-border);
+  }
+
+  .border-gold-400 {
+    border-color: var(--color-gold-400);
+  }
+
+  .border-gold-500 {
+    border-color: var(--color-gold-500);
+  }
+
+  .border-gold-600 {
+    border-color: var(--color-gold-600);
+  }
+
+  .border-gold-700 {
+    border-color: var(--color-gold-700);
+  }
+
+  .shadow-gold {
+    box-shadow: var(--shadow-gold);
+  }
+
+  .shadow-red {
+    box-shadow: var(--shadow-red);
+  }
+
+  .accent-gold {
+    accent-color: var(--color-gold-500);
+  }
+
+  .accent-red {
+    accent-color: #dc2626;
+  }
+
+  .scrollbar-thin {
+    scrollbar-width: thin;
+  }
 }
 
 /* ─── Component Classes ───────────────────────────────────────────────────── */
@@ -111,6 +173,7 @@ body {
     backdrop-filter: blur(8px);
     transition: border-color 0.2s ease;
   }
+
   .card:hover {
     border-color: rgba(201, 168, 76, 0.3);
   }
@@ -139,13 +202,21 @@ body {
     outline: none;
     transition: border-color 0.15s ease, box-shadow 0.15s ease;
   }
+
   .input:focus {
     border-color: var(--color-gold-600);
     box-shadow: 0 0 0 2px rgba(201, 168, 76, 0.15);
   }
+
   .input::placeholder {
     color: var(--color-muted);
   }
+
+  select option {
+    background: var(--color-surface);
+    color: var(--color-text);
+  }
+
   /* Remove number input spinners */
   .input[type="number"]::-webkit-inner-spin-button,
   .input[type="number"]::-webkit-outer-spin-button {
@@ -162,6 +233,7 @@ body {
     background-position: right 0.75rem center;
     padding-right: 2.25rem;
   }
+
   select.input option {
     background: var(--color-surface2);
     color: var(--color-text);
@@ -183,12 +255,14 @@ body {
     transition: all 0.15s ease;
     user-select: none;
   }
+
   .btn-gold:hover {
     background: linear-gradient(135deg, rgba(45, 31, 8, 0.8), rgba(122, 88, 32, 0.4));
     border-color: var(--color-gold-400);
     color: var(--color-gold-300);
     box-shadow: 0 0 12px rgba(201, 168, 76, 0.25);
   }
+
   .btn-gold:active {
     transform: scale(0.97);
   }
@@ -209,6 +283,7 @@ body {
     transition: all 0.15s ease;
     user-select: none;
   }
+
   .btn-ghost:hover {
     color: var(--color-text);
     border-color: rgba(201, 168, 76, 0.4);
@@ -224,6 +299,7 @@ body {
     outline: none;
     cursor: pointer;
   }
+
   input[type="range"]::-webkit-slider-thumb {
     -webkit-appearance: none;
     appearance: none;
@@ -234,6 +310,7 @@ body {
     box-shadow: 0 0 6px rgba(201, 168, 76, 0.5);
     transition: transform 0.15s ease;
   }
+
   input[type="range"]::-webkit-slider-thumb:hover {
     transform: scale(1.2);
   }
@@ -241,41 +318,134 @@ body {
 
 /* ─── Animations ─────────────────────────────────────────────────────────── */
 @keyframes dice-shake {
-  0%, 100% { transform: translate(0, 0) rotate(0deg); }
-  10%       { transform: translate(-2px, -2px) rotate(-3deg); }
-  20%       { transform: translate(2px, -2px) rotate(3deg); }
-  30%       { transform: translate(-2px, 2px) rotate(-2deg); }
-  40%       { transform: translate(2px, 2px) rotate(2deg); }
-  50%       { transform: translate(-1px, -1px) rotate(-1deg); }
-  60%       { transform: translate(1px, -1px) rotate(1deg); }
-  70%       { transform: translate(-1px, 1px) rotate(-0.5deg); }
-  80%       { transform: translate(1px, 1px) rotate(0.5deg); }
-  90%       { transform: translate(0, 0) rotate(0deg); }
+
+  0%,
+  100% {
+    transform: translate(0, 0) rotate(0deg);
+  }
+
+  10% {
+    transform: translate(-2px, -2px) rotate(-3deg);
+  }
+
+  20% {
+    transform: translate(2px, -2px) rotate(3deg);
+  }
+
+  30% {
+    transform: translate(-2px, 2px) rotate(-2deg);
+  }
+
+  40% {
+    transform: translate(2px, 2px) rotate(2deg);
+  }
+
+  50% {
+    transform: translate(-1px, -1px) rotate(-1deg);
+  }
+
+  60% {
+    transform: translate(1px, -1px) rotate(1deg);
+  }
+
+  70% {
+    transform: translate(-1px, 1px) rotate(-0.5deg);
+  }
+
+  80% {
+    transform: translate(1px, 1px) rotate(0.5deg);
+  }
+
+  90% {
+    transform: translate(0, 0) rotate(0deg);
+  }
+}
+
+@keyframes dice-spin {
+  0% {
+    transform: scale(1) rotate(0deg);
+    filter: blur(0px);
+  }
+
+  25% {
+    transform: scale(1.2) rotate(15deg);
+    filter: blur(1px);
+  }
+
+  50% {
+    transform: scale(1.1) rotate(-15deg);
+    filter: blur(1px);
+  }
+
+  75% {
+    transform: scale(1.15) rotate(10deg);
+    filter: blur(0px);
+  }
+
+  100% {
+    transform: scale(1) rotate(0deg);
+    filter: blur(0px);
+  }
 }
 
 @keyframes gold-pulse {
-  0%, 100% { box-shadow: 0 0 10px rgba(201, 168, 76, 0.4); }
-  50%       { box-shadow: 0 0 30px rgba(201, 168, 76, 0.8), 0 0 60px rgba(201, 168, 76, 0.3); }
+
+  0%,
+  100% {
+    box-shadow: 0 0 10px rgba(201, 168, 76, 0.4);
+  }
+
+  50% {
+    box-shadow: 0 0 30px rgba(201, 168, 76, 0.8), 0 0 60px rgba(201, 168, 76, 0.3);
+  }
 }
 
 @keyframes number-pop {
-  0%   { transform: scale(0.8); opacity: 0.5; }
-  60%  { transform: scale(1.1); }
-  100% { transform: scale(1);   opacity: 1; }
+  0% {
+    transform: scale(0.8);
+    opacity: 0.5;
+  }
+
+  60% {
+    transform: scale(1.1);
+  }
+
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
 }
 
 @keyframes slide-in-right {
-  from { transform: translateX(20px); opacity: 0; }
-  to   { transform: translateX(0);    opacity: 1; }
+  from {
+    transform: translateX(20px);
+    opacity: 0;
+  }
+
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
 }
 
 @keyframes fade-in {
-  from { opacity: 0; transform: translateY(6px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .animate-dice-shake {
   animation: dice-shake 0.6s ease-in-out;
+}
+
+.animate-dice-spin {
+  animation: dice-spin 0.3s ease-in-out infinite;
 }
 
 .animate-gold-pulse {
@@ -296,6 +466,260 @@ body {
 
 /* Tailwind's animate-pulse override for gold glow */
 @keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50%       { opacity: 0.6; }
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.6;
+  }
+}
+
+/* ─── Dice Popup Animations ─────────────────────────────────────────────── */
+@keyframes popup-appear {
+  0% {
+    transform: scale(0.6) translateY(30px);
+    opacity: 0;
+  }
+
+  60% {
+    transform: scale(1.05) translateY(-4px);
+    opacity: 1;
+  }
+
+  100% {
+    transform: scale(1) translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes popup-exit {
+  0% {
+    transform: scale(1) translateY(0);
+    opacity: 1;
+  }
+
+  100% {
+    transform: scale(0.8) translateY(-20px);
+    opacity: 0;
+  }
+}
+
+@keyframes float-up {
+  0% {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+
+  100% {
+    transform: translateY(-60px) scale(0.5);
+    opacity: 0;
+  }
+}
+
+@keyframes chip-tumble {
+  0% {
+    transform: rotate(0deg) scale(1);
+  }
+
+  20% {
+    transform: rotate(-25deg) scale(1.2);
+  }
+
+  40% {
+    transform: rotate(20deg) scale(1.15);
+  }
+
+  60% {
+    transform: rotate(-15deg) scale(1.1);
+  }
+
+  80% {
+    transform: rotate(10deg) scale(1.05);
+  }
+
+  100% {
+    transform: rotate(0deg) scale(1);
+  }
+}
+
+@keyframes backdrop-fade-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+.animate-popup-appear {
+  animation: popup-appear 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+.animate-popup-exit {
+  animation: popup-exit 0.25s ease-in forwards;
+}
+
+.animate-float-up {
+  animation: float-up 0.8s ease-out forwards;
+}
+
+.animate-chip-tumble {
+  animation: chip-tumble 0.45s ease-in-out infinite;
+}
+
+.animate-backdrop {
+  animation: backdrop-fade-in 0.2s ease-out forwards;
+}
+
+/* ─── Dice Throw From Above ─────────────────────────────────────────────── */
+
+/* The dice falls from above, bounces twice, then settles */
+@keyframes dice-throw {
+  0% {
+    transform: translateY(-280px) rotate(0deg) scale(0.6);
+    opacity: 0;
+  }
+
+  8% {
+    opacity: 1;
+  }
+
+  35% {
+    transform: translateY(0px) rotate(calc(var(--spin-dir, 1) * 360deg)) scale(1);
+  }
+
+  /* First impact */
+  45% {
+    transform: translateY(-60px) rotate(calc(var(--spin-dir, 1) * 400deg)) scale(0.95);
+  }
+
+  /* First bounce up */
+  60% {
+    transform: translateY(0px) rotate(calc(var(--spin-dir, 1) * 480deg)) scale(1.05);
+  }
+
+  /* Second impact */
+  70% {
+    transform: translateY(-20px) rotate(calc(var(--spin-dir, 1) * 500deg)) scale(0.98);
+  }
+
+  /* Second bounce */
+  82% {
+    transform: translateY(0px) rotate(calc(var(--spin-dir, 1) * 520deg)) scale(1.02);
+  }
+
+  /* Settle */
+  90% {
+    transform: translateY(-4px) rotate(calc(var(--spin-dir, 1) * 525deg)) scale(1);
+  }
+
+  /* Tiny hop */
+  100% {
+    transform: translateY(0px) rotate(calc(var(--spin-dir, 1) * 540deg)) scale(1);
+    opacity: 1;
+  }
+}
+
+/* Shadow beneath the dice that grows as it approaches */
+@keyframes dice-shadow {
+  0% {
+    transform: translate(-50%, -50%) scale(0.2);
+    opacity: 0;
+  }
+
+  35% {
+    transform: translate(-50%, -50%) scale(1.3);
+    opacity: 0.6;
+  }
+
+  45% {
+    transform: translate(-50%, -50%) scale(0.8);
+    opacity: 0.3;
+  }
+
+  60% {
+    transform: translate(-50%, -50%) scale(1.1);
+    opacity: 0.5;
+  }
+
+  70% {
+    transform: translate(-50%, -50%) scale(0.9);
+    opacity: 0.35;
+  }
+
+  82% {
+    transform: translate(-50%, -50%) scale(1.05);
+    opacity: 0.45;
+  }
+
+  100% {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 0.4;
+  }
+}
+
+/* Impact flash ring on bounce */
+@keyframes impact-ring {
+  0% {
+    transform: translate(-50%, -50%) scale(0.5);
+    opacity: 0.8;
+  }
+
+  100% {
+    transform: translate(-50%, -50%) scale(2.5);
+    opacity: 0;
+  }
+}
+
+/* Result number pops in after dice settles */
+@keyframes result-reveal {
+  0% {
+    transform: scale(0);
+    opacity: 0;
+  }
+
+  50% {
+    transform: scale(1.3);
+  }
+
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* Entire overlay fades out */
+@keyframes throw-overlay-exit {
+  0% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+}
+
+.animate-dice-throw {
+  animation: dice-throw 0.9s cubic-bezier(0.22, 0.61, 0.36, 1) forwards;
+}
+
+.animate-dice-shadow {
+  animation: dice-shadow 0.9s cubic-bezier(0.22, 0.61, 0.36, 1) forwards;
+}
+
+.animate-impact-ring {
+  animation: impact-ring 0.4s ease-out forwards;
+}
+
+.animate-result-reveal {
+  animation: result-reveal 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+.animate-throw-exit {
+  animation: throw-overlay-exit 0.3s ease-in forwards;
 }

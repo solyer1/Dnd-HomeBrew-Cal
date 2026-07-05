@@ -33,7 +33,9 @@ export type DamageType =
   | 'poison'
   | 'sound'
   | 'force'
-  | 'arcane';
+  | 'arcane'
+  | 'wind'
+  | 'true';
 
 // ─── Modifiers ────────────────────────────────────────────────────────────────
 
@@ -47,6 +49,16 @@ export interface DamageModifier {
 
 // ─── Calculator Input ─────────────────────────────────────────────────────────
 
+export interface DamagePartition {
+  id: string;
+  damageType: DamageType;
+  /** Percentage of the base damage (0 to 100) */
+  percentage: number;
+  resistanceState: ResistanceState;
+  resistanceStacks: number;
+  vulnerabilityStacks: number;
+}
+
 /**
  * All inputs needed to calculate a single damage instance.
  */
@@ -55,16 +67,8 @@ export interface DamageInput {
   baseDamage: number;
   /** The d20 attack roll result (1–20) */
   attackRoll: number;
-  /** Type of damage being dealt */
-  damageType: DamageType;
-  /** The target's resistance state against this damage type */
-  resistanceState: ResistanceState;
-  /**
-   * Number of vulnerability stacks.
-   * Each stack multiplies damage by ×2. [dnd cal.txt line 11]
-   * Only relevant when resistanceState === 'vulnerability'.
-   */
-  vulnerabilityStacks: number;
+  /** The distribution of damage types (percentages should sum to 100) */
+  damagePartitions: DamagePartition[];
   /** User-defined modifiers (flat bonus or percentage bonus) */
   modifiers: DamageModifier[];
 }
@@ -78,6 +82,14 @@ export interface DamageStep {
   detail?: string; // e.g. "×2.5 (Natural 20)"
 }
 
+export interface PartitionBreakdown {
+  partition: DamagePartition;
+  allocatedDamage: number;
+  resistanceMultiplier: number;
+  afterResistance: number;
+  isImmune: boolean;
+}
+
 /**
  * Full breakdown of every calculation step.
  * Shown in the DamageBreakdownDisplay component.
@@ -86,14 +98,13 @@ export interface DamageBreakdown {
   baseDamage: number;
   critMultiplier: number;
   afterCrit: number;
-  resistanceMultiplier: number;
-  afterResistance: number;
+  partitionBreakdowns: PartitionBreakdown[];
+  totalAfterResistance: number;
   flatModifiersTotal: number;
   afterFlatModifiers: number;
   percentageModifiersTotal: number; // total % applied
   afterPercentageModifiers: number;
   finalDamage: number;
-  isImmune: boolean;
   isCrit: boolean;
   steps: DamageStep[];
 }

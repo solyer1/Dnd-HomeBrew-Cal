@@ -2,7 +2,8 @@
 
 /**
  * DiceRoller
- * Full RPG dice roller with multiple groups, animations, and roll history.
+ * Full RPG dice roller with multiple groups, animations, roll history,
+ * and "Send to Calculator" that can target Base Damage or Attack Roll.
  */
 
 import React, { useState, useCallback } from 'react';
@@ -13,6 +14,7 @@ import { generateId } from '@/utils/math';
 import { DiceGroupRow } from './DiceGroupRow';
 import { RollResultDisplay } from './RollResultDisplay';
 import { RollHistory } from './RollHistory';
+import { DiceThrowOverlay } from '../calculator/DiceThrowOverlay';
 import type { RollResult } from '@/types/dice';
 
 const DICE_TYPES: DiceType[] = ['d4', 'd6', 'd8', 'd10', 'd12', 'd20', 'd100'];
@@ -30,7 +32,14 @@ export function DiceRoller() {
 
   const [groups, setGroups] = useState<DiceGroup[]>([makeDefaultGroup()]);
   const [lastResult, setLastResult] = useState<RollResult | null>(null);
-  const [isRolling, setIsRolling] = useState(false);
+  
+  const [throwOverlay, setThrowOverlay] = useState<{
+    values: number[];
+    total: number;
+    diceType: string | string[];
+    result: RollResult;
+  } | null>(null);
+  
   const [rollLabel, setRollLabel] = useState('');
 
   const addGroup = useCallback(() => {
@@ -47,20 +56,26 @@ export function DiceRoller() {
     );
   }, []);
 
-  const handleRoll = useCallback(async () => {
-    if (isRolling) return;
-    setIsRolling(true);
-    setLastResult(null);
-
-    // Small delay for animation
-    await new Promise((r) => setTimeout(r, 600));
-
+  const handleRoll = useCallback(() => {
+    if (throwOverlay) return;
     const result = rollAllGroups(groups);
-    setLastResult(result);
-    addToHistory(rollLabel.trim() || buildLabel(groups), result);
+    const flatValues = result.groups.flatMap(g => g.rolls.map(r => r.value));
+    const flatTypes = result.groups.flatMap(g => g.rolls.map(() => g.group.diceType));
+    
+    setThrowOverlay({
+      values: flatValues,
+      total: result.grandTotal,
+      diceType: flatTypes,
+      result,
+    });
+  }, [groups, throwOverlay]);
 
-    setIsRolling(false);
-  }, [groups, isRolling, rollLabel, addToHistory]);
+  const handleThrowComplete = useCallback(() => {
+    if (!throwOverlay) return;
+    setLastResult(throwOverlay.result);
+    addToHistory(rollLabel.trim() || buildLabel(groups), throwOverlay.result);
+    setThrowOverlay(null);
+  }, [throwOverlay, rollLabel, groups, addToHistory]);
 
   return (
     <div className="flex flex-col gap-6">
@@ -72,7 +87,7 @@ export function DiceRoller() {
             Dice Roller
           </h2>
           <p className="text-xs text-muted">
-            Add dice groups · Roll · See history
+            Roll · Send to Calculator · See history
           </p>
         </div>
       </div>
@@ -95,7 +110,7 @@ export function DiceRoller() {
           {/* Dice Groups */}
           <div className="card flex flex-col gap-3">
             <div className="flex items-center justify-between">
-              <label className="label">Dice Groups</label>
+              <label className="label mb-0">Dice Groups</label>
               <button onClick={addGroup} className="btn-ghost text-xs">
                 + Add Group
               </button>
@@ -125,19 +140,13 @@ export function DiceRoller() {
           <button
             id="roll-button"
             onClick={handleRoll}
-            disabled={isRolling}
-            className={`w-full py-4 rounded-xl font-display font-bold text-xl border-2 transition-all duration-200
-              ${isRolling
-                ? 'border-gold-700 bg-gold-900/20 text-gold-600 cursor-not-allowed animate-pulse'
+            disabled={throwOverlay !== null}
+            className={`w-full py-5 rounded-xl font-display font-bold text-2xl border-2 transition-all duration-200
+              ${throwOverlay !== null
+                ? 'border-gold-700 bg-gold-900/30 text-gold-600 cursor-not-allowed'
                 : 'border-gold-500 bg-gold-900/30 text-gold-300 hover:bg-gold-800/40 hover:text-gold-200 hover:shadow-gold active:scale-95'}`}
           >
-            {isRolling ? (
-              <span className="inline-flex items-center gap-2">
-                <span className="animate-spin">🎲</span> Rolling…
-              </span>
-            ) : (
-              '🎲 Roll Dice'
-            )}
+            🎲 Roll Dice
           </button>
         </div>
 
@@ -145,23 +154,32 @@ export function DiceRoller() {
         <div className="flex flex-col gap-4">
           {/* Current result */}
           {lastResult ? (
-            <RollResultDisplay result={lastResult} isRolling={isRolling} />
+            <RollResultDisplay result={lastResult} isRolling={throwOverlay !== null} />
           ) : (
             <div className="card flex items-center justify-center h-40 text-muted text-center">
               <div>
-                <div className="text-4xl mb-2 opacity-30">🎲</div>
-                <div className="text-sm">Roll to see results</div>
+                <div className="text-5xl mb-3 opacity-20 animate-pulse">🎲</div>
+                <div className="text-sm">Roll dice to see results</div>
+                <div className="text-xs mt-1 opacity-60">Then send to Calculator!</div>
               </div>
             </div>
           )}
 
           {/* History */}
-          <RollHistory
-            history={rollHistory}
-            onClear={clearHistory}
-          />
+          <RollHistory history={rollHistory} onClear={clearHistory} />
         </div>
       </div>
+
+      {/* ── Global Throw Overlay ── */}
+      {throwOverlay && (
+        <DiceThrowOverlay
+          values={throwOverlay.values}
+          total={throwOverlay.total}
+          diceType={throwOverlay.diceType}
+          label={rollLabel.trim() || buildLabel(groups)}
+          onComplete={handleThrowComplete}
+        />
+      )}
     </div>
   );
 }

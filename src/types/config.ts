@@ -19,4 +19,5 @@ export interface AppSettings {
   bgColor: string;
   bgImageUrl: string;
   bgOpacity: number; // 0–1
+  rollSpeed: 'fast' | 'normal' | 'slow';
 }

@@ -26,6 +26,8 @@ export const DAMAGE_TYPES: DamageTypeConfig[] = [
   { id: 'sound',    label: 'Sound',      color: 'text-teal-300',   bgColor: 'bg-teal-950',    icon: '🔊' },
   { id: 'force',    label: 'Force',      color: 'text-violet-400', bgColor: 'bg-violet-950',  icon: '💫' },
   { id: 'arcane',   label: 'Arcane',     color: 'text-indigo-400', bgColor: 'bg-indigo-950',  icon: '🌀' },
+  { id: 'wind',     label: 'Wind',       color: 'text-green-300',  bgColor: 'bg-green-950',   icon: '🌪️' },
+  { id: 'true',     label: 'True',       color: 'text-slate-300',  bgColor: 'bg-slate-800',   icon: '☄️' },
 ];
 
 export const getDamageTypeConfig = (id: DamageType): DamageTypeConfig =>

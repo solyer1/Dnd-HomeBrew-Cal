@@ -10,14 +10,22 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   bgColor: '#0a0a12',
   bgImageUrl: '',
   bgOpacity: 0.85,
+  rollSpeed: 'normal',
 };
 
 export const DEFAULT_DAMAGE_INPUT: DamageInput = {
   baseDamage: 10,
   attackRoll: 15,
-  damageType: 'physical',
-  resistanceState: 'none',
-  vulnerabilityStacks: 1,
+  damagePartitions: [
+    {
+      id: 'default-1',
+      damageType: 'physical',
+      percentage: 100,
+      resistanceState: 'none',
+      resistanceStacks: 1,
+      vulnerabilityStacks: 1,
+    }
+  ],
   modifiers: [],
 };
 

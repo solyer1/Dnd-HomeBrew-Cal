@@ -137,6 +137,20 @@ export function SettingsPanel() {
                   </div>
                 )}
 
+                {/* Roll Speed */}
+                <div>
+                  <label className="text-xs text-muted mb-1 block">Dice Roll Speed</label>
+                  <select
+                    value={settings.rollSpeed}
+                    onChange={(e) => updateSettings({ rollSpeed: e.target.value as any })}
+                    className="input text-sm py-1.5"
+                  >
+                    <option value="fast">Fast (0.6s)</option>
+                    <option value="normal">Normal (0.9s)</option>
+                    <option value="slow">Cinematic (1.5s)</option>
+                  </select>
+                </div>
+
                 {/* Opacity / Transparency */}
                 <div>
                   <div className="flex justify-between items-center mb-1">
