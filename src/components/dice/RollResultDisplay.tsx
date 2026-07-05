@@ -143,9 +143,20 @@ export function RollResultDisplay({ result, isRolling }: Props) {
                 />
               ))}
               {groupResult.group.modifier !== 0 && (
-                <span className="inline-flex items-center justify-center px-3 h-11 rounded-xl font-bold text-sm border-2 border-blue-700 bg-blue-950 text-blue-300">
-                  {groupResult.group.modifier > 0 ? '+' : ''}
-                  {groupResult.group.modifier}
+                <span
+                  className="inline-flex items-center justify-center px-3 h-11 rounded-xl font-bold text-sm border-2 border-blue-700 bg-blue-950 text-blue-300 flex-col gap-0"
+                  title={groupResult.group.modifierMode === 'per-die'
+                    ? `+${groupResult.group.modifier} applied to each of the ${groupResult.group.quantity} dice`
+                    : `+${groupResult.group.modifier} added to the group sum`}
+                >
+                  <span>
+                    {groupResult.group.modifier > 0 ? '+' : ''}{groupResult.group.modifierMode === 'per-die'
+                      ? groupResult.group.modifier * groupResult.group.quantity
+                      : groupResult.group.modifier}
+                  </span>
+                  <span className="text-[9px] font-normal text-blue-400 leading-none">
+                    {groupResult.group.modifierMode === 'per-die' ? 'per die' : 'sum'}
+                  </span>
                 </span>
               )}
             </div>

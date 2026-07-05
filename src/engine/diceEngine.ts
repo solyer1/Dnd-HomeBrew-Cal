@@ -38,13 +38,24 @@ export function rollDie(sides: number): IndividualRoll {
 /**
  * Roll all dice in a single group (e.g. 2d6+3).
  */
-export function rollGroup(group: DiceGroup): RollGroupResult {
+export function rollGroup(group: DiceGroup, enableDieCap: boolean = true): RollGroupResult {
   const sides = DICE_SIDES[group.diceType];
   const rolls: IndividualRoll[] = Array.from({ length: group.quantity }, () =>
     rollDie(sides),
   );
   const subtotal = rolls.reduce((sum, r) => sum + r.value, 0);
-  const total = subtotal + group.modifier;
+  const rawTotal = group.modifierMode === 'per-die'
+    ? subtotal + group.modifier * group.quantity
+    : subtotal + group.modifier;
+
+  // Cap the final total at the maximum possible natural roll for this group (if enabled)
+  let total = rawTotal;
+  if (enableDieCap) {
+    const maxPossible = sides * group.quantity;
+    const minPossible = group.quantity; // 1 per die
+    total = Math.max(minPossible, Math.min(maxPossible, rawTotal));
+  }
+
   return { group, rolls, subtotal, total };
 }
 
@@ -53,8 +64,8 @@ export function rollGroup(group: DiceGroup): RollGroupResult {
 /**
  * Roll all dice groups and return a complete RollResult.
  */
-export function rollAllGroups(groups: DiceGroup[]): RollResult {
-  const groupResults: RollGroupResult[] = groups.map(rollGroup);
+export function rollAllGroups(groups: DiceGroup[], enableDieCap: boolean = true): RollResult {
+  const groupResults: RollGroupResult[] = groups.map(g => rollGroup(g, enableDieCap));
   const grandTotal = groupResults.reduce((sum, r) => sum + r.total, 0);
   return {
     groups: groupResults,

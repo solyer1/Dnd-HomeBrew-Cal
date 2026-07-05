@@ -159,6 +159,7 @@ function MiniDiceRoller({ onApply }: { onApply: (value: number, target: RollTarg
   const [diceType, setDiceType] = useState('d8');
   const [quantity, setQuantity] = useState(1);
   const [modifier, setModifier] = useState(0);
+  const [modifierMode, setModifierMode] = useState<'total' | 'per-die'>('total');
   const [isRolling, setIsRolling] = useState(false);
   const [scramblingValues, setScramblingValues] = useState<number[]>([]);
   const [popup, setPopup] = useState<PopupState | null>(null);
@@ -183,12 +184,13 @@ function MiniDiceRoller({ onApply }: { onApply: (value: number, target: RollTarg
     await new Promise(r => setTimeout(r, 700));
     clearInterval(scramble);
 
-    // Real roll
+    // Real roll — use the engine so per-die mode is calculated correctly
     const group: DiceGroup = {
       id: 'mini',
       diceType: diceType as DiceGroup['diceType'],
       quantity: qty,
       modifier,
+      modifierMode,
       label: '',
     };
     const result = rollAllGroups([group]);
@@ -220,7 +222,7 @@ function MiniDiceRoller({ onApply }: { onApply: (value: number, target: RollTarg
       exiting: false,
       target: 'baseDamage',
     });
-  }, [isRolling, diceType, quantity, modifier]);
+  }, [isRolling, diceType, quantity, modifier, modifierMode]);
 
   const closePopup = useCallback(() => {
     setPopup(p => p ? { ...p, exiting: true } : null);
@@ -277,9 +279,34 @@ function MiniDiceRoller({ onApply }: { onApply: (value: number, target: RollTarg
             ))}
           </div>
 
-          {/* Modifier */}
+          {/* Modifier + mode toggle */}
           <div className="flex items-center gap-1 ml-auto">
-            <span className="text-xs text-muted">+</span>
+            {/* +sum / +each toggle */}
+            <div className="flex rounded-lg overflow-hidden border border-border text-xs font-semibold">
+              <button
+                onClick={() => setModifierMode('total')}
+                title="Add modifier once to the total"
+                className={`px-2 py-1 transition-all ${
+                  modifierMode === 'total'
+                    ? 'bg-blue-700 text-white'
+                    : 'bg-surface text-muted hover:text-white'
+                }`}
+              >
+                +sum
+              </button>
+              <button
+                onClick={() => setModifierMode('per-die')}
+                title="Add modifier to each individual die"
+                className={`px-2 py-1 transition-all ${
+                  modifierMode === 'per-die'
+                    ? 'bg-emerald-700 text-white'
+                    : 'bg-surface text-muted hover:text-white'
+                }`}
+              >
+                +each
+              </button>
+            </div>
+            <span className="text-xs text-muted">bonus</span>
             <input
               type="number"
               value={modifier}
@@ -323,11 +350,11 @@ function MiniDiceRoller({ onApply }: { onApply: (value: number, target: RollTarg
           {isRolling ? (
             <span className="flex items-center justify-center gap-2">
               <span className="animate-spin">🎲</span>
-              <span className="animate-pulse">Rolling {quantity}{diceType}…</span>
+              <span className="animate-pulse">Rolling {quantity}{diceType}{modifier !== 0 ? ` ${modifier > 0 ? '+' : ''}${modifier}${modifierMode === 'per-die' ? ' each' : ''}` : ''}…</span>
               <span className="animate-spin" style={{ animationDirection: 'reverse' }}>🎲</span>
             </span>
           ) : (
-            `🎲 Roll ${quantity}${diceType}${modifier !== 0 ? (modifier > 0 ? `+${modifier}` : modifier) : ''}`
+            `🎲 Roll ${quantity}${diceType}${modifier !== 0 ? (modifier > 0 ? `+${modifier}` : modifier) + (modifierMode === 'per-die' ? ' each' : '') : ''}`
           )}
         </button>
       </div>
@@ -337,13 +364,19 @@ function MiniDiceRoller({ onApply }: { onApply: (value: number, target: RollTarg
 
 // ─── Main Calculator ──────────────────────────────────────────────────────────
 export function DamageCalculator() {
-  const { critTable, pendingDice, consumePendingDice } = useAppContext();
+  const { critTable, pendingDice, consumePendingDice, settings } = useAppContext();
 
   const [input, setInput] = useState<DamageInput>(DEFAULT_DAMAGE_INPUT);
 
   // Base Damage local dice config
   const [baseQty, setBaseQty] = useState(1);
   const [baseType, setBaseType] = useState('d20');
+  const [baseModifier, setBaseModifier] = useState(0);
+  const [baseModifierMode, setBaseModifierMode] = useState<'total' | 'per-die'>('total');
+
+  // Attack Roll modifier config
+  const [attackModifier, setAttackModifier] = useState(0);
+  const [hasRolledAttack, setHasRolledAttack] = useState(false);
 
   // Dice throw overlay state
   const [throwOverlay, setThrowOverlay] = useState<{
@@ -353,40 +386,62 @@ export function DamageCalculator() {
     diceType: string;
     isNat20?: boolean;
     isNat1?: boolean;
+    modifiers?: number[];
   } | null>(null);
 
   const triggerThrow = useCallback((target: RollTarget) => {
     if (target === 'attackRoll') {
       const roll = Math.floor(Math.random() * 20) + 1;
+      
+      const rawTotal = roll + attackModifier;
+      const total = settings.enableDieCap 
+        ? Math.min(20, Math.max(1, rawTotal))
+        : Math.max(1, rawTotal);
+      
       setThrowOverlay({
         target,
         values: [roll],
-        total: roll,
+        total: total,
         diceType: 'd20',
         isNat20: roll === 20,
         isNat1: roll === 1,
+        modifiers: [attackModifier],
       });
     } else {
-      const qty = Math.max(1, baseQty);
-      const max = parseInt(baseType.replace('d', ''), 10) || 20;
-      const rolls = Array.from({ length: qty }, () => Math.floor(Math.random() * max) + 1);
-      const sum = rolls.reduce((a, b) => a + b, 0);
+      // Use the engine so per-die modifier is correctly applied
+      const group: DiceGroup = {
+        id: 'calc-base',
+        diceType: baseType as DiceGroup['diceType'],
+        quantity: Math.max(1, baseQty),
+        modifier: baseModifier,
+        modifierMode: baseModifierMode,
+        label: '',
+      };
+      const result = rollAllGroups([group], settings.enableDieCap);
+      const rolls = result.groups[0].rolls.map(r => r.value);
+      
       setThrowOverlay({
         target,
         values: rolls,
-        total: sum,
+        total: result.grandTotal,
         diceType: baseType,
+        modifiers: rolls.map(() => {
+          if (baseModifierMode === 'per-die') return baseModifier;
+          if (baseQty === 1) return baseModifier;
+          return 0;
+        }),
       });
     }
-  }, [baseQty, baseType]);
+  }, [baseQty, baseType, baseModifier, baseModifierMode, settings.enableDieCap, attackModifier, throwOverlay]);
 
   const handleThrowComplete = useCallback(() => {
     if (!throwOverlay) return;
+    if (throwOverlay.target === 'attackRoll') setHasRolledAttack(true);
     setInput(prev => ({
       ...prev,
       [throwOverlay.target]: throwOverlay.target === 'attackRoll'
-        ? Math.min(20, Math.max(1, throwOverlay.total))
-        : throwOverlay.total,
+        ? Math.min(20, Math.max(1, throwOverlay.values[0])) // Save raw roll to state
+        : throwOverlay.total, // Save total damage to state
     }));
     setThrowOverlay(null);
   }, [throwOverlay]);
@@ -395,6 +450,8 @@ export function DamageCalculator() {
   useEffect(() => {
     if (pendingDice !== null) {
       const { value, target } = pendingDice;
+      if (target === 'attack') setHasRolledAttack(true);
+      
       setThrowOverlay({
         target: target === 'attack' ? 'attackRoll' : 'baseDamage',
         values: [value],
@@ -407,7 +464,11 @@ export function DamageCalculator() {
     }
   }, [pendingDice, consumePendingDice]);
 
-  const result = useMemo(() => calculateDamage(input, critTable), [input, critTable]);
+  const effectiveAttackRoll = settings.enableDieCap 
+    ? Math.min(20, Math.max(1, input.attackRoll + attackModifier))
+    : Math.max(1, input.attackRoll + attackModifier);
+    
+  const result = useMemo(() => calculateDamage({ ...input, attackRoll: effectiveAttackRoll }, critTable), [input, effectiveAttackRoll, critTable]);
 
   const update = useCallback(<K extends keyof DamageInput>(key: K, value: DamageInput[K]) => {
     setInput(prev => ({ ...prev, [key]: value }));
@@ -478,7 +539,7 @@ export function DamageCalculator() {
                   min={1}
                   max={20}
                   value={baseQty}
-                  onChange={e => setBaseQty(Number(e.target.value))}
+                  onChange={e => setBaseQty(Math.min(20, Math.max(1, Number(e.target.value) || 1)))}
                   className="w-8 text-center text-xs bg-transparent py-1 outline-none font-bold text-white"
                 />
                 <select
@@ -496,6 +557,50 @@ export function DamageCalculator() {
                   🎲 Roll
                 </button>
               </div>
+            </div>
+
+            {/* Bonus modifier row */}
+            <div className="flex items-center gap-2 mb-3">
+              {/* +sum / +each toggle */}
+              <div className="flex rounded-lg overflow-hidden border border-border text-xs font-semibold">
+                <button
+                  onClick={() => setBaseModifierMode('total')}
+                  title="Add bonus once to the roll total"
+                  className={`px-2 py-1 transition-all ${
+                    baseModifierMode === 'total'
+                      ? 'bg-blue-700 text-white'
+                      : 'bg-surface text-muted hover:text-white'
+                  }`}
+                >
+                  +sum
+                </button>
+                <button
+                  onClick={() => setBaseModifierMode('per-die')}
+                  title="Add bonus to each individual die"
+                  className={`px-2 py-1 transition-all ${
+                    baseModifierMode === 'per-die'
+                      ? 'bg-emerald-700 text-white'
+                      : 'bg-surface text-muted hover:text-white'
+                  }`}
+                >
+                  +each
+                </button>
+              </div>
+              <span className="text-xs text-muted">bonus</span>
+              <input
+                type="number"
+                value={baseModifier}
+                onChange={e => setBaseModifier(Number(e.target.value))}
+                className="input w-16 text-xs py-1 text-center"
+                placeholder="0"
+              />
+              {baseModifier !== 0 && (
+                <span className="text-xs text-muted italic">
+                  {baseModifierMode === 'per-die'
+                    ? `(+${baseModifier} × ${baseQty} dice = +${baseModifier * baseQty} total)`
+                    : `(+${baseModifier} to sum)`}
+                </span>
+              )}
             </div>
             <div className="flex items-center gap-3">
               <input
@@ -537,40 +642,77 @@ export function DamageCalculator() {
                 🎲 Roll d20
               </button>
             </div>
+
+            {/* Bonus modifier row */}
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-xs text-muted font-semibold">Bonus to Hit</span>
+              <input
+                type="number"
+                value={attackModifier}
+                onChange={e => setAttackModifier(Number(e.target.value))}
+                className="input w-16 text-xs py-1 text-center"
+                placeholder="0"
+              />
+            </div>
+
             <div className="flex items-center gap-3">
               <input
                 id="attack-roll"
                 type="range"
-                min={1} max={20}
-                value={input.attackRoll}
-                onChange={e => update('attackRoll', Number(e.target.value))}
+                min={settings.enableDieCap ? Math.min(20, Math.max(1, 1 + attackModifier)) : Math.max(1, 1 + attackModifier)}
+                max={settings.enableDieCap ? 20 : Math.max(1, 20 + attackModifier)}
+                value={effectiveAttackRoll}
+                onChange={e => {
+                  setHasRolledAttack(true);
+                  const newTotal = Number(e.target.value);
+                  const raw = newTotal - attackModifier;
+                  update('attackRoll', Math.min(20, Math.max(1, raw)));
+                }}
                 className="flex-1 accent-gold"
               />
-              <div className={`w-14 h-14 rounded-xl flex items-center justify-center font-display font-bold text-xl border-2 transition-all duration-300
-                ${input.attackRoll === 20 ? 'bg-gold-900 border-gold-400 text-gold-300 shadow-gold' :
-                  input.attackRoll === 1  ? 'bg-red-950 border-red-500 text-red-400' :
-                  isCrit ? 'bg-amber-950 border-amber-500 text-amber-300' :
-                  'bg-surface border-border text-white'}`}
+              <div className={`w-14 h-14 rounded-xl flex flex-col items-center justify-center border-2 transition-all duration-300
+                ${!hasRolledAttack ? 'bg-surface border-border opacity-50' :
+                  effectiveAttackRoll >= 20 ? 'bg-gold-900 border-gold-400 shadow-gold' :
+                  input.attackRoll === 1  ? 'bg-red-950 border-red-500' :
+                  effectiveAttackRoll >= 20 ? 'bg-amber-950 border-amber-500' :
+                  'bg-surface border-border'}`}
               >
-                {input.attackRoll}
+                <div className={`font-display font-bold text-2xl leading-none
+                  ${!hasRolledAttack ? 'text-muted' :
+                    effectiveAttackRoll >= 20 ? 'text-gold-300' :
+                    input.attackRoll === 1 ? 'text-red-400' :
+                    effectiveAttackRoll >= 20 ? 'text-amber-300' : 'text-white'}`}
+                >
+                  {!hasRolledAttack ? '—' : effectiveAttackRoll}
+                </div>
+                {hasRolledAttack && attackModifier !== 0 && (
+                  <div className={`text-[10px] font-semibold mt-0.5 leading-none
+                    ${input.attackRoll === 20 ? 'text-gold-500' :
+                      input.attackRoll === 1 ? 'text-red-500' :
+                      effectiveAttackRoll >= 20 ? 'text-amber-500/70' : 'text-muted'}`}
+                  >
+                    ({input.attackRoll} {attackModifier > 0 ? '+' : ''}{attackModifier})
+                  </div>
+                )}
               </div>
             </div>
             {/* Crit tiers */}
             <div className="mt-2 flex gap-1">
-              {[
-                { r: '1-10',  mul: '×1',   active: input.attackRoll <= 10 },
-                { r: '11-17', mul: '×1.5', active: input.attackRoll >= 11 && input.attackRoll <= 17 },
-                { r: '18-19', mul: '×2',   active: input.attackRoll >= 18 && input.attackRoll <= 19 },
-                { r: '20',    mul: '×2.5', active: input.attackRoll === 20 },
-              ].map(tier => (
-                <div key={tier.r}
-                  className={`flex-1 text-center py-1 rounded text-xs transition-all duration-200
-                    ${tier.active ? 'bg-gold-900 text-gold-300 border border-gold-600' : 'bg-surface text-muted border border-border'}`}
-                >
-                  <div className="font-bold">{tier.mul}</div>
-                  <div className="opacity-70">{tier.r}</div>
-                </div>
-              ))}
+              {critTable.map((tier, idx) => {
+                // If it's the highest tier in the table, let it catch any rolls that go over (if cap is off)
+                const isHighestTier = idx === critTable.length - 1;
+                const isActive = effectiveAttackRoll >= tier.minRoll && (effectiveAttackRoll <= tier.maxRoll || (isHighestTier && effectiveAttackRoll > tier.maxRoll));
+                const r = tier.minRoll === tier.maxRoll ? `${tier.minRoll}` : `${tier.minRoll}-${tier.maxRoll}`;
+                return (
+                  <div key={`${r}-${idx}`}
+                    className={`flex-1 text-center py-1 rounded text-xs transition-all duration-200
+                      ${isActive ? 'bg-gold-900 text-gold-300 border border-gold-600 shadow-[0_0_10px_rgba(250,212,0,0.2)]' : 'bg-surface/60 text-muted border border-border'}`}
+                  >
+                    <div className="font-bold">×{tier.multiplier}</div>
+                    <div className="opacity-70 text-[10px]">{r}</div>
+                  </div>
+                );
+              })}
             </div>
           </div>
 
@@ -724,6 +866,7 @@ export function DamageCalculator() {
           label={throwOverlay.target === 'attackRoll' ? 'Attack Roll' : 'Base Damage'}
           isNat20={throwOverlay.isNat20}
           isNat1={throwOverlay.isNat1}
+          modifiers={throwOverlay.modifiers}
           onComplete={handleThrowComplete}
         />
       )}

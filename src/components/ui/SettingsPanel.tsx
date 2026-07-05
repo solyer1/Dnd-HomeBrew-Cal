@@ -151,6 +151,28 @@ export function SettingsPanel() {
                   </select>
                 </div>
 
+                {/* Die Cap Toggle */}
+                <div className="flex items-center justify-between">
+                  <div>
+                    <label className="text-xs text-muted font-bold">Enforce Max Natural Roll (Cap)</label>
+                    <p className="text-[10px] text-muted/70 leading-tight mt-0.5">
+                      Prevents modified totals from exceeding the die's natural maximum (e.g., 1d20+12 caps at 20).
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => updateSettings({ enableDieCap: !settings.enableDieCap })}
+                    className={`relative w-10 h-5 rounded-full transition-colors ${
+                      settings.enableDieCap ? 'bg-gold-600' : 'bg-surface border border-border'
+                    }`}
+                  >
+                    <div
+                      className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
+                        settings.enableDieCap ? 'translate-x-5' : 'translate-x-0'
+                      }`}
+                    />
+                  </button>
+                </div>
+
                 {/* Opacity / Transparency */}
                 <div>
                   <div className="flex justify-between items-center mb-1">

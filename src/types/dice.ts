@@ -37,6 +37,12 @@ export interface DiceGroup {
   quantity: number;
   /** Optional flat modifier for this group (e.g. +3) */
   modifier: number;
+  /**
+   * How to apply the modifier:
+   * - 'total'   → added once to the group sum (default, e.g. 2d6+3 = sum+3)
+   * - 'per-die' → added to each individual die roll (e.g. 2d6+3 = (d6+3)+(d6+3))
+   */
+  modifierMode: 'total' | 'per-die';
   label?: string;
 }
 

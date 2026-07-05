@@ -24,11 +24,12 @@ const makeDefaultGroup = (): DiceGroup => ({
   diceType: 'd6',
   quantity: 1,
   modifier: 0,
+  modifierMode: 'total',
   label: '',
 });
 
 export function DiceRoller() {
-  const { addToHistory, rollHistory, clearHistory } = useAppContext();
+  const { addToHistory, rollHistory, clearHistory, settings } = useAppContext();
 
   const [groups, setGroups] = useState<DiceGroup[]>([makeDefaultGroup()]);
   const [lastResult, setLastResult] = useState<RollResult | null>(null);
@@ -37,7 +38,9 @@ export function DiceRoller() {
     values: number[];
     total: number;
     diceType: string | string[];
+    modifiers?: number[];
     result: RollResult;
+    groups: DiceGroup[];
   } | null>(null);
   
   const [rollLabel, setRollLabel] = useState('');
@@ -58,15 +61,24 @@ export function DiceRoller() {
 
   const handleRoll = useCallback(() => {
     if (throwOverlay) return;
-    const result = rollAllGroups(groups);
+    const result = rollAllGroups(groups, settings.enableDieCap);
     const flatValues = result.groups.flatMap(g => g.rolls.map(r => r.value));
     const flatTypes = result.groups.flatMap(g => g.rolls.map(() => g.group.diceType));
+    const flatModifiers = result.groups.flatMap(g => {
+      return g.rolls.map(() => {
+        if (g.group.modifierMode === 'per-die') return g.group.modifier;
+        if (g.group.quantity === 1) return g.group.modifier;
+        return 0; // If sum mode and multiple dice, we don't animate a single die for it
+      });
+    });
     
     setThrowOverlay({
       values: flatValues,
       total: result.grandTotal,
       diceType: flatTypes,
+      modifiers: flatModifiers,
       result,
+      groups,
     });
   }, [groups, throwOverlay]);
 
@@ -176,7 +188,8 @@ export function DiceRoller() {
           values={throwOverlay.values}
           total={throwOverlay.total}
           diceType={throwOverlay.diceType}
-          label={rollLabel.trim() || buildLabel(groups)}
+          modifiers={throwOverlay.modifiers}
+          label={rollLabel.trim() || buildLabel(throwOverlay.groups)}
           onComplete={handleThrowComplete}
         />
       )}
@@ -190,7 +203,9 @@ function buildLabel(groups: DiceGroup[]): string {
     .map((g) => {
       const base = `${g.quantity}${g.diceType}`;
       if (g.modifier === 0) return base;
-      return `${base}${g.modifier > 0 ? '+' : ''}${g.modifier}`;
+      const modStr = `${g.modifier > 0 ? '+' : ''}${g.modifier}`;
+      const modeStr = g.modifierMode === 'per-die' ? ' each' : '';
+      return `${base}${modStr}${modeStr}`;
     })
     .join(' + ');
 }

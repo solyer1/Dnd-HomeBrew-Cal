@@ -19,5 +19,8 @@ export interface AppSettings {
   bgColor: string;
   bgImageUrl: string;
   bgOpacity: number; // 0–1
+  /** Controls how fast the dice animation plays */
   rollSpeed: 'fast' | 'normal' | 'slow';
+  /** If true, the final modified roll cannot exceed the die's natural max */
+  enableDieCap: boolean;
 }

@@ -37,9 +37,20 @@ export function getCritMultiplier(
   roll: number,
   critTable: CritTableEntry[],
 ): { multiplier: number; label: string } {
-  const entry = critTable.find(
+  if (critTable.length === 0) return { multiplier: 1, label: 'No Crit' };
+  
+  let entry = critTable.find(
     (e) => roll >= e.minRoll && roll <= e.maxRoll,
   );
+  
+  // If the roll is higher than the max of the highest tier, assign it to the highest tier
+  if (!entry) {
+    const highestTier = critTable[critTable.length - 1];
+    if (roll > highestTier.maxRoll) {
+      entry = highestTier;
+    }
+  }
+
   if (!entry) return { multiplier: 1, label: 'No Crit' };
   return { multiplier: entry.multiplier, label: entry.label ?? `×${entry.multiplier}` };
 }

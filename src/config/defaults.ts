@@ -11,6 +11,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   bgImageUrl: '',
   bgOpacity: 0.85,
   rollSpeed: 'normal',
+  enableDieCap: true,
 };
 
 export const DEFAULT_DAMAGE_INPUT: DamageInput = {

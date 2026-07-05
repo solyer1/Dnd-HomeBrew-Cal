@@ -11,9 +11,9 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAppContext } from '@/context/AppContext';
 
 interface DiceThrowProps {
-  /** Array of individual dice values */
+  /** Array of individual dice values (raw, without per-die modifier applied) */
   values: number[];
-  /** Total sum (or final evaluated value) */
+  /** Total sum (or final evaluated value, with modifier already included) */
   total: number;
   /** Dice type string (e.g. 'd20', 'd6') or array of types for multiple groups */
   diceType: string | string[];
@@ -25,6 +25,8 @@ interface DiceThrowProps {
   isNat20?: boolean;
   /** Whether this was a nat 1 (only applies if 1d20) */
   isNat1?: boolean;
+  /** Optional array of modifiers, one per die */
+  modifiers?: number[];
 }
 
 const getDiceSVG = (type: string, phase: string, isNat20: boolean, isNat1: boolean) => {
@@ -75,9 +77,10 @@ export function DiceThrowOverlay({
   label = 'Roll',
   isNat20 = false,
   isNat1 = false,
+  modifiers = [],
 }: DiceThrowProps) {
 
-  const [phase, setPhase] = useState<'throwing' | 'landed' | 'exiting'>('throwing');
+  const [phase, setPhase] = useState<'throwing' | 'landed' | 'absorbing' | 'exiting'>('throwing');
   const [scrambleValues, setScrambleValues] = useState<number[]>(values);
 
   const maxFacesArray = Array.isArray(diceType) 
@@ -116,10 +119,27 @@ export function DiceThrowOverlay({
     };
   }, [phase, values, defaultMaxFaces, rollDuration]);
 
-  // After landing, hold for a moment then exit
+  // After landing, transition to absorbing or exiting
   useEffect(() => {
     if (phase !== 'landed') return;
-    const t = setTimeout(() => setPhase('exiting'), 1200);
+    
+    const hasAnyModifier = modifiers.some((m: number) => m !== 0);
+    
+    if (hasAnyModifier) {
+      // Pause to show raw roll, then animate absorbing the modifier
+      const t = setTimeout(() => setPhase('absorbing'), 800);
+      return () => clearTimeout(t);
+    } else {
+      // No modifier to absorb, just hold and exit
+      const t = setTimeout(() => setPhase('exiting'), 1200);
+      return () => clearTimeout(t);
+    }
+  }, [phase, modifiers]);
+
+  // After absorbing, hold to show final total, then exit
+  useEffect(() => {
+    if (phase !== 'absorbing') return;
+    const t = setTimeout(() => setPhase('exiting'), 1000);
     return () => clearTimeout(t);
   }, [phase]);
 
@@ -129,6 +149,11 @@ export function DiceThrowOverlay({
     const t = setTimeout(onComplete, 300);
     return () => clearTimeout(t);
   }, [phase, onComplete]);
+
+  const hasAnyModifier = useMemo(() => modifiers.some((m: number) => m !== 0), [modifiers]);
+  const showTotal = hasAnyModifier 
+    ? (phase === 'absorbing' || phase === 'exiting')
+    : (phase === 'landed' || phase === 'exiting');
 
   return (
     <div
@@ -142,8 +167,19 @@ export function DiceThrowOverlay({
           {values.map((finalVal, i) => {
             const currentType = Array.isArray(diceType) ? diceType[i] : (diceType as string);
             const displayVal = phase === 'throwing' ? scrambleValues[i] : finalVal;
-            const isDieNat20 = currentType === 'd20' && finalVal === 20;
-            const isDieNat1 = currentType === 'd20' && finalVal === 1;
+            const currentMod = modifiers[i] || 0;
+            
+            // Calculate final clamped value for when the modifier is absorbed
+            const maxFaces = parseInt(currentType.replace('d', ''), 10) || 20;
+            const uncapped = finalVal + currentMod;
+            const clampedFinal = settings.enableDieCap 
+              ? Math.max(1, Math.min(maxFaces, uncapped)) 
+              : Math.max(1, uncapped);
+            const showAbsorbed = phase === 'absorbing' || phase === 'exiting';
+            const renderVal = (currentMod !== 0 && showAbsorbed) ? clampedFinal : displayVal;
+
+            const isDieNat20 = currentType === 'd20' && renderVal === 20;
+            const isDieNat1 = currentType === 'd20' && renderVal === 1;
 
             return (
               <div key={i} className="relative w-16 h-16 flex items-center justify-center">
@@ -216,9 +252,39 @@ export function DiceThrowOverlay({
                     `}
                     style={{ transform: getNumberOffset(currentType) }}
                   >
-                    {displayVal}
+                    <span
+                      className={`
+                        absolute inset-0 flex items-center justify-center transition-all duration-300
+                        ${showAbsorbed ? 'opacity-0 scale-50 delay-300' : 'opacity-100 scale-100'}
+                      `}
+                    >
+                      {displayVal}
+                    </span>
+                    <span
+                      className={`
+                        absolute inset-0 flex items-center justify-center transition-all duration-300
+                        ${showAbsorbed ? 'opacity-100 scale-100 delay-300' : 'opacity-0 scale-150'}
+                      `}
+                    >
+                      {renderVal}
+                    </span>
                   </span>
                 </div>
+
+                {/* Per-die modifier chip shown when landed, animates up in absorbing */}
+                {(phase === 'landed' || phase === 'absorbing') && currentMod !== 0 && (
+                  <div 
+                    className={`
+                      absolute -bottom-6 whitespace-nowrap text-[10px] font-bold text-blue-400
+                      bg-blue-950/80 px-2 py-0.5 rounded-full border border-blue-800 backdrop-blur-sm
+                      transition-all duration-500 ease-in-out
+                      ${phase === 'landed' ? 'animate-chip-pop opacity-100 translate-y-0' : 'opacity-0 -translate-y-8 scale-75'}
+                    `}
+                    style={{ animationDelay: `${0.1 + i * 0.05}s` }}
+                  >
+                    ({currentMod > 0 ? '+' : ''}{currentMod})
+                  </div>
+                )}
               </div>
             );
           })}
@@ -226,8 +292,15 @@ export function DiceThrowOverlay({
       </div>
 
       {/* Label and result text */}
-      {phase === 'landed' && (
-        <div className="mt-6 text-center flex flex-col items-center animate-fade-in">
+      {showTotal && (
+        <div 
+          className="mt-6 text-center flex flex-col items-center"
+          style={{
+            animation: 'backdrop-fade-in 0.3s ease-out forwards',
+            animationDelay: (hasAnyModifier && phase === 'absorbing') ? '0.35s' : '0s',
+            opacity: 0,
+          }}
+        >
           {isNat20 && (
             <div className="text-gold-400 font-display font-bold text-sm mb-1 animate-pulse">
               ⭐ NATURAL 20! ⭐
@@ -248,7 +321,8 @@ export function DiceThrowOverlay({
       {/* Throwing label */}
       {phase === 'throwing' && (
         <div className="mt-8 text-gold-600 text-xs font-semibold animate-pulse uppercase tracking-widest">
-          Rolling {values.length} {Array.isArray(diceType) ? 'dice' : diceType} {label}…
+          Rolling {values.length} {Array.isArray(diceType) ? 'dice' : diceType}
+          {` ${label}`}…
         </div>
       )}
     </div>
