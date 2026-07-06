@@ -34,6 +34,7 @@ export function getRedis(): Redis | typeof memFallback {
     _redis = new Redis({
       url: process.env.UPSTASH_REDIS_REST_URL,
       token: process.env.UPSTASH_REDIS_REST_TOKEN,
+      fetch: (input, init) => fetch(input, { ...init, cache: 'no-store' }),
     });
   }
   return _redis;

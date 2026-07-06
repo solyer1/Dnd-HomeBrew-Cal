@@ -34,10 +34,20 @@ async function getConfig(): Promise<AdminConfig> {
 export async function GET() {
   try {
     const config = await getConfig();
-    return Response.json(config);
+    return Response.json(config, {
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+        'Pragma': 'no-cache',
+        'Expires': '0',
+      },
+    });
   } catch (err) {
     console.error('[GET /api/admin/config]', err);
-    return Response.json(DEFAULT_CONFIG);
+    return Response.json(DEFAULT_CONFIG, {
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+      },
+    });
   }
 }
 
