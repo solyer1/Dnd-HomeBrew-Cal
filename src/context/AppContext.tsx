@@ -4,6 +4,7 @@
  * AppContext
  * Global state provider for crit table, app settings, roll history,
  * and cross-tab communication (send dice value to calculator).
+ * On mount, merges config from /api/admin/config (persisted server-side).
  */
 
 import React, {
@@ -11,13 +12,15 @@ import React, {
   useContext,
   useState,
   useCallback,
+  useEffect,
   type ReactNode,
 } from 'react';
-import type { CritTableEntry } from '@/types/config';
+import type { CritTableEntry, StatusType, DamageTypeConfig } from '@/types/config';
 import type { AppSettings } from '@/types/config';
 import type { RollHistoryEntry } from '@/types/dice';
 import { DEFAULT_CRIT_TABLE } from '@/config/critTable';
 import { DEFAULT_APP_SETTINGS, MAX_ROLL_HISTORY } from '@/config/defaults';
+import { DEFAULT_DAMAGE_TYPES } from '@/config/damageTypes';
 import { generateId } from '@/utils/math';
 import type { RollResult } from '@/types/dice';
 
@@ -29,6 +32,14 @@ interface AppContextValue {
   // App Settings (background, theme)
   settings: AppSettings;
   updateSettings: (partial: Partial<AppSettings>) => void;
+
+  // Admin-managed: custom status types
+  statusTypes: StatusType[];
+  setStatusTypes: (types: StatusType[]) => void;
+
+  // Admin-managed: custom damage types
+  damageTypes: DamageTypeConfig[];
+  setDamageTypes: (types: DamageTypeConfig[]) => void;
 
   // Roll History
   rollHistory: RollHistoryEntry[];
@@ -46,8 +57,23 @@ const AppContext = createContext<AppContextValue | null>(null);
 export function AppProvider({ children }: { children: ReactNode }) {
   const [critTable, setCritTable] = useState<CritTableEntry[]>(DEFAULT_CRIT_TABLE);
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_APP_SETTINGS);
+  const [statusTypes, setStatusTypes] = useState<StatusType[]>([]);
+  const [damageTypes, setDamageTypes] = useState<DamageTypeConfig[]>(DEFAULT_DAMAGE_TYPES);
   const [rollHistory, setRollHistory] = useState<RollHistoryEntry[]>([]);
   const [pendingDice, setPendingDice] = useState<{ value: number; target: 'base' | 'attack' } | null>(null);
+
+  // Load admin config from the server on mount
+  useEffect(() => {
+    fetch('/api/admin/config')
+      .then((r) => r.json())
+      .then((cfg) => {
+        if (cfg.critTable?.length) setCritTable(cfg.critTable);
+        if (cfg.settings) setSettings((prev) => ({ ...prev, ...cfg.settings }));
+        if (cfg.statusTypes) setStatusTypes(cfg.statusTypes);
+        if (cfg.damageTypes) setDamageTypes(cfg.damageTypes);
+      })
+      .catch(() => {/* silently use defaults */});
+  }, []);
 
   const updateSettings = useCallback((partial: Partial<AppSettings>) => {
     setSettings((prev) => ({ ...prev, ...partial }));
@@ -80,6 +106,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setCritTable,
         settings,
         updateSettings,
+        statusTypes,
+        setStatusTypes,
+        damageTypes,
+        setDamageTypes,
         rollHistory,
         addToHistory,
         clearHistory,

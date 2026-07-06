@@ -11,7 +11,6 @@ import type { DamageInput, DamageModifier, ResistanceState, DamageType, DamagePa
 import { calculateDamage } from '@/engine/damageEngine';
 import { useAppContext } from '@/context/AppContext';
 import { DEFAULT_DAMAGE_INPUT } from '@/config/defaults';
-import { DAMAGE_TYPES } from '@/config/damageTypes';
 import { DamageBreakdownDisplay } from './DamageBreakdownDisplay';
 import { ModifierPanel } from './ModifierPanel';
 import { generateId } from '@/utils/math';
@@ -364,7 +363,7 @@ function MiniDiceRoller({ onApply }: { onApply: (value: number, target: RollTarg
 
 // ─── Main Calculator ──────────────────────────────────────────────────────────
 export function DamageCalculator() {
-  const { critTable, pendingDice, consumePendingDice, settings } = useAppContext();
+  const { critTable, pendingDice, consumePendingDice, settings, statusTypes, damageTypes } = useAppContext();
 
   const [input, setInput] = useState<DamageInput>(DEFAULT_DAMAGE_INPUT);
 
@@ -468,7 +467,7 @@ export function DamageCalculator() {
     ? Math.min(20, Math.max(1, input.attackRoll + attackModifier))
     : Math.max(1, input.attackRoll + attackModifier);
     
-  const result = useMemo(() => calculateDamage({ ...input, attackRoll: effectiveAttackRoll }, critTable), [input, effectiveAttackRoll, critTable]);
+  const result = useMemo(() => calculateDamage({ ...input, attackRoll: effectiveAttackRoll }, critTable, statusTypes), [input, effectiveAttackRoll, critTable, statusTypes]);
 
   const update = useCallback(<K extends keyof DamageInput>(key: K, value: DamageInput[K]) => {
     setInput(prev => ({ ...prev, [key]: value }));
@@ -476,14 +475,15 @@ export function DamageCalculator() {
 
   // Partition helpers
   const addPartition = useCallback(() => {
+    const firstType = damageTypes[0]?.id ?? 'physical';
     setInput(prev => ({
       ...prev,
       damagePartitions: [
         ...prev.damagePartitions,
-        { id: generateId(), damageType: 'physical', percentage: 0, resistanceState: 'none', resistanceStacks: 1, vulnerabilityStacks: 1 }
+        { id: generateId(), damageType: firstType, percentage: 0, resistanceState: 'none', resistanceStacks: 1, vulnerabilityStacks: 1 }
       ]
     }));
-  }, []);
+  }, [damageTypes]);
 
   const removePartition = useCallback((id: string) => {
     setInput(prev => ({ ...prev, damagePartitions: prev.damagePartitions.filter(p => p.id !== id) }));
@@ -503,6 +503,26 @@ export function DamageCalculator() {
 
   const updateModifier = useCallback((id: string, patch: Partial<DamageModifier>) => {
     setInput(prev => ({ ...prev, modifiers: prev.modifiers.map(m => m.id === id ? { ...m, ...patch } : m) }));
+  }, []);
+
+  const toggleAttackerStatusType = useCallback((id: string) => {
+    setInput(prev => {
+      const active = prev.attackerStatusTypeIds || [];
+      if (active.includes(id)) {
+        return { ...prev, attackerStatusTypeIds: active.filter(x => x !== id) };
+      }
+      return { ...prev, attackerStatusTypeIds: [...active, id] };
+    });
+  }, []);
+
+  const toggleTargetStatusType = useCallback((id: string) => {
+    setInput(prev => {
+      const active = prev.targetStatusTypeIds || [];
+      if (active.includes(id)) {
+        return { ...prev, targetStatusTypeIds: active.filter(x => x !== id) };
+      }
+      return { ...prev, targetStatusTypeIds: [...active, id] };
+    });
   }, []);
 
 
@@ -716,6 +736,75 @@ export function DamageCalculator() {
             </div>
           </div>
 
+          {/* Attacker Status Effects */}
+          {statusTypes.length > 0 && (
+            <div className="card flex flex-col gap-3">
+              <label className="label mb-0">Attacker Status Effects</label>
+              <div className="flex flex-wrap gap-2">
+                {statusTypes.map(st => {
+                  const isActive = (input.attackerStatusTypeIds || []).includes(st.id);
+                  return (
+                    <button
+                      key={st.id}
+                      onClick={() => toggleAttackerStatusType(st.id)}
+                      className={`flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all text-sm
+                        ${isActive
+                          ? 'border-gold-500 bg-gold-900/40 text-gold-300 shadow-[0_0_8px_rgba(201,168,76,0.3)]'
+                          : 'border-border bg-surface/50 text-muted hover:border-gold-700/50 hover:text-white'}`}
+                    >
+                      <span className="w-5 h-5 flex items-center justify-center rounded overflow-hidden" style={{ background: st.bgColor, color: st.color, border: '1px solid rgba(255,255,255,0.1)' }}>
+                        {st.iconType === 'image' && st.imageUrl
+                          ? <img src={st.imageUrl} alt="" className="w-full h-full object-cover" />
+                          : <span className="text-xs">{st.icon}</span>}
+                      </span>
+                      <span className="font-semibold">{st.label}</span>
+                      {st.mode === 'calculation' && (
+                        <span className={`text-[10px] ml-1 ${isActive ? 'text-gold-400' : 'text-muted'}`}>
+                          {st.attackRollModifier ? ` (Hit ${st.attackRollModifier > 0 ? '+' : ''}${st.attackRollModifier})` : ''}
+                          {st.damageFlatModifier ? ` (DMG ${st.damageFlatModifier > 0 ? '+' : ''}${st.damageFlatModifier})` : ''}
+                          {st.damageMultiplier !== 1 ? ` (×${st.damageMultiplier})` : ''}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Target Status Effects */}
+          {statusTypes.length > 0 && (
+            <div className="card flex flex-col gap-3">
+              <label className="label mb-0">Target Status Effects</label>
+              <div className="flex flex-wrap gap-2">
+                {statusTypes.map(st => {
+                  const isActive = (input.targetStatusTypeIds || []).includes(st.id);
+                  return (
+                    <button
+                      key={st.id}
+                      onClick={() => toggleTargetStatusType(st.id)}
+                      className={`flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all text-sm
+                        ${isActive
+                          ? 'border-blue-500 bg-blue-900/30 text-blue-300 shadow-[0_0_8px_rgba(59,130,246,0.3)]'
+                          : 'border-border bg-surface/50 text-muted hover:border-blue-700/50 hover:text-white'}`}
+                    >
+                      <span className="w-5 h-5 flex items-center justify-center rounded overflow-hidden" style={{ background: st.bgColor, color: st.color, border: '1px solid rgba(255,255,255,0.1)' }}>
+                        {st.iconType === 'image' && st.imageUrl
+                          ? <img src={st.imageUrl} alt="" className="w-full h-full object-cover" />
+                          : <span className="text-xs">{st.icon}</span>}
+                      </span>
+                      <span className="font-semibold">{st.label}</span>
+                      {st.mode === 'calculation' && st.incomingDamageMultiplier !== undefined && st.incomingDamageMultiplier !== 1 && (
+                        <span className={`text-[10px] ml-1 ${isActive ? 'text-blue-400' : 'text-muted'}`}>
+                          (×{st.incomingDamageMultiplier})
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Damage Partitions */}
           <div className="card flex flex-col gap-4">
@@ -744,7 +833,7 @@ export function DamageCalculator() {
             )}
 
             {input.damagePartitions.map(partition => {
-              const cfg = DAMAGE_TYPES.find(d => d.id === partition.damageType);
+              const cfg = damageTypes.find(d => d.id === partition.damageType);
               return (
                 <div key={partition.id}
                   className="p-3 bg-surface/50 border border-border rounded-xl flex flex-col gap-3 relative"
@@ -766,15 +855,28 @@ export function DamageCalculator() {
                   <div className="flex items-end gap-2 pr-6">
                     <div className="flex-1 flex flex-col gap-1">
                       <span className="text-xs text-muted">Damage Type</span>
-                      <select
-                        value={partition.damageType}
-                        onChange={e => updatePartition(partition.id, { damageType: e.target.value as DamageType })}
-                        className="input py-1 text-sm"
-                      >
-                        {DAMAGE_TYPES.map(dt => (
-                          <option key={dt.id} value={dt.id}>{dt.icon} {dt.label}</option>
-                        ))}
-                      </select>
+                      <div className="flex items-center gap-2">
+                        {cfg && (
+                          cfg.iconType === 'image' && cfg.imageUrl ? (
+                            <div className="w-7 h-7 flex-shrink-0 rounded bg-surface border border-border overflow-hidden flex items-center justify-center">
+                              <img src={cfg.imageUrl} alt="" className="w-full h-full object-cover" />
+                            </div>
+                          ) : (
+                            <div className="w-7 h-7 flex-shrink-0 rounded bg-surface border border-border flex items-center justify-center text-lg">
+                              {cfg.icon}
+                            </div>
+                          )
+                        )}
+                        <select
+                          value={partition.damageType}
+                          onChange={e => updatePartition(partition.id, { damageType: e.target.value as DamageType })}
+                          className="input py-1 text-sm flex-1"
+                        >
+                          {damageTypes.map(dt => (
+                            <option key={dt.id} value={dt.id}>{dt.label}</option>
+                          ))}
+                        </select>
+                      </div>
                     </div>
                     <div className="w-28 flex flex-col gap-1">
                       <span className="text-xs text-muted">Percentage</span>

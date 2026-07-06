@@ -112,9 +112,15 @@ export default function Home() {
         </main>
 
         {/* ── Footer ────────────────────────────────────── */}
-        <footer className="border-t border-border bg-bg/40 text-center py-3 text-xs text-muted">
-          D&D Damage Calculator v0.1 · Rules from{' '}
-          <span className="text-gold-600">dnd cal.txt</span>
+        <footer className="border-t border-border bg-bg/40 py-3 text-xs text-muted flex items-center justify-center gap-3">
+          <span>
+            D&D Damage Calculator v0.1 · Rules from{' '}
+            <span className="text-gold-600">dnd cal.txt</span>
+          </span>
+          <span className="opacity-30">|</span>
+          <a href="/admin" className="hover:text-gold-400 transition-colors flex items-center gap-1 font-semibold">
+            ⚙️ Admin
+          </a>
         </footer>
       </div>
     </div>

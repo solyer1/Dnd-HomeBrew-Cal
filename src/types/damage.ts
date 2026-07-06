@@ -21,21 +21,7 @@ export type ResistanceState = 'none' | 'resistance' | 'vulnerability' | 'immunit
  * All damage types derived from status effects and class descriptions in dnd cal.txt.
  * Extending this enum is safe and will not break the engine.
  */
-export type DamageType =
-  | 'physical'
-  | 'fire'
-  | 'frost'
-  | 'lightning'
-  | 'water'
-  | 'holy'
-  | 'necrotic'
-  | 'psychic'
-  | 'poison'
-  | 'sound'
-  | 'force'
-  | 'arcane'
-  | 'wind'
-  | 'true';
+export type DamageType = string;
 
 // ─── Modifiers ────────────────────────────────────────────────────────────────
 
@@ -71,6 +57,10 @@ export interface DamageInput {
   damagePartitions: DamagePartition[];
   /** User-defined modifiers (flat bonus or percentage bonus) */
   modifiers: DamageModifier[];
+  /** IDs of active status types applied to the attacker */
+  attackerStatusTypeIds?: string[];
+  /** IDs of active status types applied to the target */
+  targetStatusTypeIds?: string[];
 }
 
 // ─── Calculation Breakdown ────────────────────────────────────────────────────

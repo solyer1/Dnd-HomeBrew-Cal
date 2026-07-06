@@ -8,7 +8,9 @@
 
 import React from 'react';
 import type { DamageResult, PartitionBreakdown } from '@/types/damage';
-import { getDamageTypeConfig } from '@/config/damageTypes';
+import { useAppContext } from '@/context/AppContext';
+import { DEFAULT_DAMAGE_TYPES } from '@/config/damageTypes';
+import type { DamageTypeConfig } from '@/types/config';
 
 interface Props {
   result: DamageResult;
@@ -16,6 +18,7 @@ interface Props {
 }
 
 export function DamageBreakdownDisplay({ result, isCrit }: Props) {
+  const { damageTypes } = useAppContext();
   const { breakdown } = result;
   
   // If ALL partitions are immune, the whole attack is immune
@@ -25,6 +28,10 @@ export function DamageBreakdownDisplay({ result, isCrit }: Props) {
     if (breakdown.totalAfterResistance === 0) return 0;
     return Math.round(breakdown.finalDamage * (p.afterResistance / breakdown.totalAfterResistance));
   };
+
+  function getDamageTypeCfg(id: string): DamageTypeConfig {
+    return damageTypes.find(d => d.id === id) || DEFAULT_DAMAGE_TYPES.find(d => d.id === id) || DEFAULT_DAMAGE_TYPES[0];
+  }
 
   return (
     <div className="flex flex-col gap-3">
@@ -55,14 +62,14 @@ export function DamageBreakdownDisplay({ result, isCrit }: Props) {
             <div className="flex flex-row flex-wrap items-center justify-center w-full gap-8 md:gap-12">
               {/* Left partitions (up to half) */}
               {breakdown.partitionBreakdowns.slice(0, Math.ceil(breakdown.partitionBreakdowns.length / 2)).map(p => {
-                const config = getDamageTypeConfig(p.partition.damageType);
+                const cfg = getDamageTypeCfg(p.partition.damageType);
                 return (
                   <div key={p.partition.id} className="flex flex-col items-center text-center">
                     <div className="text-xs text-muted mb-1">{p.partition.percentage}%</div>
                     <div className="font-display text-4xl font-bold text-white mb-1">
                       {getPartitionFinal(p)}
                     </div>
-                    <div className={`text-sm ${config.color}`}>{config.label} Damage</div>
+                    <div className="text-sm" style={{ color: cfg.color }}>{cfg.label} Damage</div>
                   </div>
                 );
               })}
@@ -80,14 +87,14 @@ export function DamageBreakdownDisplay({ result, isCrit }: Props) {
 
               {/* Right partitions (remaining half) */}
               {breakdown.partitionBreakdowns.slice(Math.ceil(breakdown.partitionBreakdowns.length / 2)).map(p => {
-                const config = getDamageTypeConfig(p.partition.damageType);
+                const cfg = getDamageTypeCfg(p.partition.damageType);
                 return (
                   <div key={p.partition.id} className="flex flex-col items-center text-center">
                     <div className="text-xs text-muted mb-1">{p.partition.percentage}%</div>
                     <div className="font-display text-4xl font-bold text-white mb-1">
                       {getPartitionFinal(p)}
                     </div>
-                    <div className={`text-sm ${config.color}`}>{config.label} Damage</div>
+                    <div className="text-sm" style={{ color: cfg.color }}>{cfg.label} Damage</div>
                   </div>
                 );
               })}
@@ -161,3 +168,4 @@ export function DamageBreakdownDisplay({ result, isCrit }: Props) {
     </div>
   );
 }
+

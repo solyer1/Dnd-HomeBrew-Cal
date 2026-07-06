@@ -25,6 +25,7 @@ import type {
   ResistanceState,
   PartitionBreakdown
 } from '@/types/damage';
+import type { StatusType } from '@/types/config';
 import { roundTo, formatMultiplier, formatSigned } from '@/utils/math';
 
 // ─── Crit Lookup ──────────────────────────────────────────────────────────────
@@ -108,6 +109,7 @@ export function getResistanceMultiplier(
 export function calculateDamage(
   input: DamageInput,
   critTable: CritTableEntry[],
+  statusTypes: StatusType[] = [],
 ): DamageResult {
   const steps: DamageStep[] = [];
 
@@ -119,9 +121,32 @@ export function calculateDamage(
     detail: `${baseDamage} raw damage`,
   });
 
+  // Step 1.5 — Resolve Status Effects (Calculation mode only)
+  const attackerStatuses = (input.attackerStatusTypeIds || [])
+    .map(id => statusTypes.find(s => s.id === id))
+    .filter((s): s is StatusType => s !== undefined && s.mode === 'calculation');
+    
+  const targetStatuses = (input.targetStatusTypeIds || [])
+    .map(id => statusTypes.find(s => s.id === id))
+    .filter((s): s is StatusType => s !== undefined && s.mode === 'calculation');
+
+  const attackRollBonus = attackerStatuses.reduce((sum, s) => sum + (s.attackRollModifier || 0), 0);
+  const effectiveAttackRoll = input.attackRoll + attackRollBonus;
+  
+  const critOverrides = attackerStatuses
+    .map(s => s.critThresholdOverride)
+    .filter((v): v is number => v !== undefined);
+  const lowestCritThreshold = critOverrides.length > 0 ? Math.min(...critOverrides) : undefined;
+
+  let rollForCrit = effectiveAttackRoll;
+  if (lowestCritThreshold !== undefined && effectiveAttackRoll >= lowestCritThreshold) {
+    // If the effective roll meets the overridden crit threshold, treat it as a max roll (20) for the crit table
+    rollForCrit = 20;
+  }
+
   // Step 2 — Critical Hit Multiplier
   const { multiplier: critMultiplier, label: critLabel } = getCritMultiplier(
-    input.attackRoll,
+    rollForCrit,
     critTable,
   );
   const afterCrit = baseDamage * critMultiplier;
@@ -129,7 +154,7 @@ export function calculateDamage(
   steps.push({
     label: 'Critical Multiplier',
     value: afterCrit,
-    detail: `${baseDamage} × ${critMultiplier} — ${critLabel} (Roll: ${input.attackRoll})`,
+    detail: `${baseDamage} × ${critMultiplier} — ${critLabel} (Roll: ${effectiveAttackRoll}${attackRollBonus !== 0 ? ` [${input.attackRoll}${formatSigned(attackRollBonus)}]` : ''})`,
   });
 
   // Step 3 — Partitions & Resistance
@@ -166,17 +191,53 @@ export function calculateDamage(
       .join(' | '),
   });
 
-  // Step 4 — Flat Modifiers (user-defined +damage)
+  // Step 4 — Status Effect Multipliers
+  let totalAfterStatus = totalAfterResistance;
+  let statusMultiplierDetail: string[] = [];
+  let combinedMultiplier = 1;
+
+  attackerStatuses.forEach(s => {
+    if (s.damageMultiplier !== 1) {
+      combinedMultiplier *= s.damageMultiplier;
+      statusMultiplierDetail.push(`${s.label}: ×${s.damageMultiplier}`);
+    }
+  });
+
+  targetStatuses.forEach(s => {
+    if (s.incomingDamageMultiplier && s.incomingDamageMultiplier !== 1) {
+      combinedMultiplier *= s.incomingDamageMultiplier;
+      statusMultiplierDetail.push(`${s.label} (Target): ×${s.incomingDamageMultiplier}`);
+    }
+  });
+
+  if (combinedMultiplier !== 1) {
+    totalAfterStatus = totalAfterResistance * combinedMultiplier;
+    steps.push({
+      label: 'Status Effects',
+      value: totalAfterStatus,
+      detail: statusMultiplierDetail.join(', '),
+    });
+  }
+
+  // Step 5 — Flat Modifiers (user-defined +damage & status flat damage)
   const flatModifiers = input.modifiers.filter((m) => m.type === 'flat');
-  const flatModifiersTotal = flatModifiers.reduce((sum, m) => sum + m.value, 0);
-  const afterFlatModifiers = totalAfterResistance + flatModifiersTotal;
-  if (flatModifiers.length > 0) {
+  let flatModifiersTotal = flatModifiers.reduce((sum, m) => sum + m.value, 0);
+  
+  let flatModifierDetails = flatModifiers.map((m) => `${m.label}: ${formatSigned(m.value)}`);
+
+  attackerStatuses.forEach(s => {
+    if (s.damageFlatModifier) {
+      flatModifiersTotal += s.damageFlatModifier;
+      flatModifierDetails.push(`${s.label}: ${formatSigned(s.damageFlatModifier)}`);
+    }
+  });
+
+  const afterFlatModifiers = totalAfterStatus + flatModifiersTotal;
+  if (flatModifierDetails.length > 0) {
     steps.push({
       label: 'Flat Modifiers',
       value: afterFlatModifiers,
-      detail: flatModifiers
-        .map((m) => `${m.label}: ${formatSigned(m.value)}`)
-        .join(', '),
+      detail: flatModifierDetails.join(', '),
     });
   }
 
@@ -202,7 +263,7 @@ export function calculateDamage(
     });
   }
 
-  // Step 6 — Final Damage (rounded)
+  // Step 7 — Final Damage (rounded)
   const finalDamage = Math.round(afterPercentageModifiers);
   steps.push({
     label: 'Final Damage',

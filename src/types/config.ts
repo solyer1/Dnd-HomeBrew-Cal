@@ -24,3 +24,59 @@ export interface AppSettings {
   /** If true, the final modified roll cannot exceed the die's natural max */
   enableDieCap: boolean;
 }
+
+// ─── Admin-managed types ─────────────────────────────────────────────────────
+
+/**
+ * A custom status type created by the admin.
+ * Can be cosmetic-only OR affect damage calculations.
+ */
+export interface StatusType {
+  id: string;
+  label: string;
+  /** 'emoji' uses the icon field; 'image' uses imageUrl */
+  iconType: 'emoji' | 'image';
+  icon: string;        // emoji char (e.g. '🔥') or fallback
+  imageUrl: string;    // URL when iconType === 'image'
+  color: string;       // hex or css color for badge text
+  bgColor: string;     // hex or css color for badge background
+  /**
+   * 'cosmetic' = display only, no mechanical effect.
+   * 'calculation' = affects damage math.
+   */
+  mode: 'cosmetic' | 'calculation';
+  
+  // Attacker modifiers
+  /** Modifies the attack roll itself (e.g. -5 for Blind, +4 for Inspired) */
+  attackRollModifier?: number;
+  /** Adds flat damage to the final calculation */
+  damageFlatModifier?: number;
+  /** Replaces the required roll for a critical hit (e.g. 18 for Paralyzed) */
+  critThresholdOverride?: number;
+  /** Outgoing damage multiplier (e.g. 1.5) */
+  damageMultiplier: number;
+  
+  // Target modifiers
+  /** Incoming damage multiplier (e.g. 1.4 for Charmed) */
+  incomingDamageMultiplier?: number;
+}
+
+/**
+ * Full configuration for a custom Damage Type.
+ */
+export interface DamageTypeConfig {
+  id: string;
+  label: string;
+  color: string;     // hex color for text (e.g. '#fb923c')
+  bgColor: string;   // hex color for badge background (e.g. '#1c0900')
+  iconType: 'emoji' | 'image';
+  icon: string;      // emoji or icon char
+  imageUrl: string;  // custom image URL
+}
+
+export interface AdminConfig {
+  critTable: CritTableEntry[];
+  settings: AppSettings;
+  statusTypes: StatusType[];
+  damageTypes: DamageTypeConfig[];
+}
