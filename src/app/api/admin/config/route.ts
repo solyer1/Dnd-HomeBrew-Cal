@@ -3,6 +3,8 @@
  * PUT  /api/admin/config  — Authenticated write (admin panel saves here)
  */
 
+export const dynamic = 'force-dynamic';
+
 import { cookies } from 'next/headers';
 import { verifyAdminToken, COOKIE_NAME } from '@/lib/auth';
 import { getRedis, ADMIN_CONFIG_KEY } from '@/lib/redis';

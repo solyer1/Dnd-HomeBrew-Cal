@@ -64,7 +64,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   // Load admin config from the server on mount
   useEffect(() => {
-    fetch('/api/admin/config')
+    fetch('/api/admin/config', { cache: 'no-store' })
       .then((r) => r.json())
       .then((cfg) => {
         if (cfg.critTable?.length) setCritTable(cfg.critTable);
