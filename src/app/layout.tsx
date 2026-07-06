@@ -2,6 +2,8 @@ import type { Metadata } from 'next';
 import { Cinzel, Inter } from 'next/font/google';
 import './globals.css';
 import { AppProvider } from '@/context/AppContext';
+import { getAdminConfig } from '@/lib/getAdminConfig';
+import type { AdminConfig } from '@/types/config';
 
 const cinzel = Cinzel({
   subsets: ['latin'],
@@ -23,15 +25,22 @@ export const metadata: Metadata = {
   keywords: ['DnD', 'D&D', 'Damage Calculator', 'Dice Roller', 'RPG', 'Combat', 'Critical Hit'],
 };
 
-export default function RootLayout({
+// Force this layout to always be dynamically rendered (never cached by Vercel)
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  // Fetch config SERVER-SIDE on every request — bypasses all client caching
+  const initialConfig: AdminConfig = await getAdminConfig();
+
   return (
     <html lang="en" className={`${cinzel.variable} ${inter.variable}`} suppressHydrationWarning>
       <body className="antialiased" suppressHydrationWarning>
-        <AppProvider>
+        <AppProvider initialConfig={initialConfig}>
           {children}
         </AppProvider>
       </body>

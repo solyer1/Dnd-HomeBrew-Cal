@@ -4,7 +4,7 @@
  * AppContext
  * Global state provider for crit table, app settings, roll history,
  * and cross-tab communication (send dice value to calculator).
- * On mount, merges config from /api/admin/config (persisted server-side).
+ * Initial config is passed from the server (layout.tsx fetches it from Redis).
  */
 
 import React, {
@@ -23,6 +23,7 @@ import { DEFAULT_APP_SETTINGS, MAX_ROLL_HISTORY } from '@/config/defaults';
 import { DEFAULT_DAMAGE_TYPES } from '@/config/damageTypes';
 import { generateId } from '@/utils/math';
 import type { RollResult } from '@/types/dice';
+import type { AdminConfig } from '@/types/config';
 
 interface AppContextValue {
   // Crit Table (editable)
@@ -54,16 +55,32 @@ interface AppContextValue {
 
 const AppContext = createContext<AppContextValue | null>(null);
 
-export function AppProvider({ children }: { children: ReactNode }) {
-  const [critTable, setCritTable] = useState<CritTableEntry[]>(DEFAULT_CRIT_TABLE);
-  const [settings, setSettings] = useState<AppSettings>(DEFAULT_APP_SETTINGS);
-  const [statusTypes, setStatusTypes] = useState<StatusType[]>([]);
-  const [damageTypes, setDamageTypes] = useState<DamageTypeConfig[]>(DEFAULT_DAMAGE_TYPES);
+interface AppProviderProps {
+  children: ReactNode;
+  /** Initial config pre-fetched server-side by layout.tsx */
+  initialConfig?: AdminConfig;
+}
+
+export function AppProvider({ children, initialConfig }: AppProviderProps) {
+  // Use server-provided initial config if available, otherwise fall back to defaults
+  const [critTable, setCritTable] = useState<CritTableEntry[]>(
+    initialConfig?.critTable ?? DEFAULT_CRIT_TABLE
+  );
+  const [settings, setSettings] = useState<AppSettings>(
+    initialConfig?.settings ?? DEFAULT_APP_SETTINGS
+  );
+  const [statusTypes, setStatusTypes] = useState<StatusType[]>(
+    initialConfig?.statusTypes ?? []
+  );
+  const [damageTypes, setDamageTypes] = useState<DamageTypeConfig[]>(
+    initialConfig?.damageTypes ?? DEFAULT_DAMAGE_TYPES
+  );
   const [rollHistory, setRollHistory] = useState<RollHistoryEntry[]>([]);
   const [pendingDice, setPendingDice] = useState<{ value: number; target: 'base' | 'attack' } | null>(null);
 
-  // Load admin config from the server on mount
+  // If no server-side config was provided, fall back to client-side fetch
   useEffect(() => {
+    if (initialConfig) return; // Already have data from server — skip
     fetch(`/api/admin/config?_t=${Date.now()}`, { cache: 'no-store' })
       .then((r) => r.json())
       .then((cfg) => {
@@ -73,7 +90,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         if (cfg.damageTypes) setDamageTypes(cfg.damageTypes);
       })
       .catch(() => {/* silently use defaults */});
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const updateSettings = useCallback((partial: Partial<AppSettings>) => {
     setSettings((prev) => ({ ...prev, ...partial }));
