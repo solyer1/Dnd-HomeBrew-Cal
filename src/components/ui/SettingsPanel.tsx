@@ -145,6 +145,7 @@ export function SettingsPanel() {
                     onChange={(e) => updateSettings({ rollSpeed: e.target.value as any })}
                     className="input text-sm py-1.5"
                   >
+                    <option value="instant">Instant(0.1s)</option>
                     <option value="fast">Fast (0.6s)</option>
                     <option value="normal">Normal (0.9s)</option>
                     <option value="slow">Cinematic (1.5s)</option>

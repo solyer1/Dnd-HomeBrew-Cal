@@ -89,7 +89,7 @@ export function DiceThrowOverlay({
   const defaultMaxFaces = maxFacesArray[0];
 
   const { settings } = useAppContext();
-  const speedMap = { fast: 0.6, normal: 0.9, slow: 1.5 };
+  const speedMap = {instant: 0.1, fast: 0.6, normal: 0.9, slow: 1.5 };
   const rollDuration = speedMap[settings.rollSpeed] || 0.9;
 
   // Pre-calculate spin directions so they don't change on re-render
