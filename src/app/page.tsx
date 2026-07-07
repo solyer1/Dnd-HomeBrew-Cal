@@ -6,11 +6,12 @@
  * Dynamic background controlled by settings.
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { DamageCalculator } from '@/components/calculator/DamageCalculator';
 import { DiceRoller } from '@/components/dice/DiceRoller';
 import { SettingsPanel } from '@/components/ui/SettingsPanel';
 import { useAppContext } from '@/context/AppContext';
+import { useAnalytics } from '@/hooks/useAnalytics';
 
 type Tab = 'calculator' | 'dice';
 
@@ -53,6 +54,17 @@ function Background() {
 
 export default function Home() {
   const [tab, setTab] = useState<Tab>('calculator');
+  const { trackPageVisit, trackTabSwitch } = useAnalytics();
+
+  // Track page visit once on mount
+  useEffect(() => {
+    trackPageVisit();
+  }, [trackPageVisit]);
+
+  function handleTabSwitch(newTab: Tab) {
+    setTab(newTab);
+    trackTabSwitch(newTab === 'calculator' ? '⚔️ Damage' : '🎲 Dice');
+  }
 
   return (
     <div className="relative min-h-screen">
@@ -82,7 +94,7 @@ export default function Home() {
                 id="tab-calculator"
                 role="tab"
                 aria-selected={tab === 'calculator'}
-                onClick={() => setTab('calculator')}
+                onClick={() => handleTabSwitch('calculator')}
                 className={`px-4 py-2 text-sm font-semibold transition-all duration-200
                   ${tab === 'calculator'
                     ? 'bg-gold-900/60 text-gold-300 border-r border-gold-700'
@@ -94,7 +106,7 @@ export default function Home() {
                 id="tab-dice"
                 role="tab"
                 aria-selected={tab === 'dice'}
-                onClick={() => setTab('dice')}
+                onClick={() => handleTabSwitch('dice')}
                 className={`px-4 py-2 text-sm font-semibold transition-all duration-200
                   ${tab === 'dice'
                     ? 'bg-gold-900/60 text-gold-300'
