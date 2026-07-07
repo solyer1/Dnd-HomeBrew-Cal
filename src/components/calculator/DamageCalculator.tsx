@@ -17,6 +17,7 @@ import { generateId } from '@/utils/math';
 import { DiceThrowOverlay } from './DiceThrowOverlay';
 import { rollAllGroups } from '@/engine/diceEngine';
 import type { DiceGroup } from '@/types/dice';
+import { useAnalytics } from '@/hooks/useAnalytics';
 
 const RESISTANCE_OPTIONS: { value: ResistanceState; label: string; color: string }[] = [
   { value: 'none',          label: 'None',          color: 'text-gray-300' },
@@ -364,6 +365,7 @@ function MiniDiceRoller({ onApply }: { onApply: (value: number, target: RollTarg
 // ─── Main Calculator ──────────────────────────────────────────────────────────
 export function DamageCalculator() {
   const { critTable, pendingDice, consumePendingDice, settings, statusTypes, damageTypes } = useAppContext();
+  const { trackDamage, trackDiceRoll } = useAnalytics();
 
   const [input, setInput] = useState<DamageInput>(DEFAULT_DAMAGE_INPUT);
 
@@ -436,14 +438,43 @@ export function DamageCalculator() {
   const handleThrowComplete = useCallback(() => {
     if (!throwOverlay) return;
     if (throwOverlay.target === 'attackRoll') setHasRolledAttack(true);
-    setInput(prev => ({
-      ...prev,
+    const newInput = {
+      ...input,
       [throwOverlay.target]: throwOverlay.target === 'attackRoll'
-        ? Math.min(20, Math.max(1, throwOverlay.values[0])) // Save raw roll to state
-        : throwOverlay.total, // Save total damage to state
-    }));
+        ? Math.min(20, Math.max(1, throwOverlay.values[0]))
+        : throwOverlay.total,
+    };
+    setInput(newInput);
+
+    // Compute the effective attack roll inline (mirrors the useMemo below)
+    const atkRoll = settings.enableDieCap
+      ? Math.min(20, Math.max(1, newInput.attackRoll + attackModifier))
+      : Math.max(1, newInput.attackRoll + attackModifier);
+
+    // Send Discord notification after a roll completes
+    const updatedResult = calculateDamage(
+      { ...newInput, attackRoll: atkRoll },
+      critTable,
+      statusTypes,
+    );
+    trackDamage(
+      updatedResult.breakdown.finalDamage,
+      updatedResult.breakdown.isCrit,
+      input.damagePartitions.length,
+    );
+    const sumModifiers = throwOverlay.modifiers?.reduce((a, b) => a + b, 0) || 0;
+    const formula = `${throwOverlay.values.length}${throwOverlay.diceType}${
+      sumModifiers > 0 ? ` + ${sumModifiers}` : sumModifiers < 0 ? ` - ${Math.abs(sumModifiers)}` : ''
+    }`;
+
+    trackDiceRoll(
+      throwOverlay.target === 'attackRoll' ? 'Attack Roll' : 'Base Damage',
+      throwOverlay.total,
+      formula
+    );
+
     setThrowOverlay(null);
-  }, [throwOverlay]);
+  }, [throwOverlay, input, attackModifier, settings.enableDieCap, critTable, statusTypes, trackDamage, trackDiceRoll]);
 
   // Receive value from Dice tab
   useEffect(() => {

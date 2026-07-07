@@ -16,6 +16,7 @@ import { RollResultDisplay } from './RollResultDisplay';
 import { RollHistory } from './RollHistory';
 import { DiceThrowOverlay } from '../calculator/DiceThrowOverlay';
 import type { RollResult } from '@/types/dice';
+import { useAnalytics } from '@/hooks/useAnalytics';
 
 const DICE_TYPES: DiceType[] = ['d4', 'd6', 'd8', 'd10', 'd12', 'd20', 'd100'];
 
@@ -30,6 +31,7 @@ const makeDefaultGroup = (): DiceGroup => ({
 
 export function DiceRoller() {
   const { addToHistory, rollHistory, clearHistory, settings } = useAppContext();
+  const { trackDiceRoll } = useAnalytics();
 
   const [groups, setGroups] = useState<DiceGroup[]>([makeDefaultGroup()]);
   const [lastResult, setLastResult] = useState<RollResult | null>(null);
@@ -85,9 +87,12 @@ export function DiceRoller() {
   const handleThrowComplete = useCallback(() => {
     if (!throwOverlay) return;
     setLastResult(throwOverlay.result);
-    addToHistory(rollLabel.trim() || buildLabel(groups), throwOverlay.result);
+    const label = rollLabel.trim() || buildLabel(groups);
+    addToHistory(label, throwOverlay.result);
+    // Send Discord notification
+    trackDiceRoll(label, throwOverlay.result.grandTotal, buildLabel(groups));
     setThrowOverlay(null);
-  }, [throwOverlay, rollLabel, groups, addToHistory]);
+  }, [throwOverlay, rollLabel, groups, addToHistory, trackDiceRoll]);
 
   return (
     <div className="flex flex-col gap-6">

@@ -44,9 +44,13 @@ export function useAnalytics() {
     });
   }, [track]);
 
-  const trackDiceRoll = useCallback((label: string, total: number) => {
+  const trackDiceRoll = useCallback((label: string, total: number, formula?: string) => {
     track('dice_roll', {
-      details: { dice: label, total },
+      details: { 
+        dice: label, 
+        total,
+        ...(formula ? { formula } : {})
+      },
     });
   }, [track]);
 
