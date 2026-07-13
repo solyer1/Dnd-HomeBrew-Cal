@@ -1,4 +1,6 @@
 'use client';
+import { useTranslation } from '@/hooks/useTranslation';
+
 
 /**
  * DiceGroupRow
@@ -17,6 +19,7 @@ interface Props {
 }
 
 export function DiceGroupRow({ group, diceTypes, index, onUpdate, onRemove }: Props) {
+  const { t } = useTranslation();
   return (
     <div className="flex flex-col gap-2 p-2 rounded-lg bg-surface/60 border border-border">
       <div className="flex items-center gap-2">
@@ -77,9 +80,7 @@ export function DiceGroupRow({ group, diceTypes, index, onUpdate, onRemove }: Pr
                 ? 'bg-blue-700 text-white'
                 : 'bg-surface text-muted hover:text-white'
             }`}
-          >
-            +sum
-          </button>
+          >{t('calc.modSum')}</button>
           <button
             onClick={() => onUpdate({ modifierMode: 'per-die' })}
             title="Add modifier to each die individually"
@@ -88,13 +89,11 @@ export function DiceGroupRow({ group, diceTypes, index, onUpdate, onRemove }: Pr
                 ? 'bg-emerald-700 text-white'
                 : 'bg-surface text-muted hover:text-white'
             }`}
-          >
-            +each
-          </button>
+          >{t('calc.modEach')}</button>
         </div>
 
         {/* Modifier value */}
-        <span className="text-muted text-sm">bonus</span>
+        <span className="text-muted text-sm">{t('calc.bonusWord')}</span>
         <input
           type="number"
           value={group.modifier}

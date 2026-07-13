@@ -6,12 +6,12 @@
  * Dynamic background controlled by settings.
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { DamageCalculator } from '@/components/calculator/DamageCalculator';
 import { DiceRoller } from '@/components/dice/DiceRoller';
 import { SettingsPanel } from '@/components/ui/SettingsPanel';
 import { useAppContext } from '@/context/AppContext';
-import { useAnalytics } from '@/hooks/useAnalytics';
+import { useTranslation } from '@/hooks/useTranslation';
 
 type Tab = 'calculator' | 'dice';
 
@@ -54,16 +54,10 @@ function Background() {
 
 export default function Home() {
   const [tab, setTab] = useState<Tab>('calculator');
-  const { trackPageVisit, trackTabSwitch } = useAnalytics();
-
-  // Track page visit once on mount
-  useEffect(() => {
-    trackPageVisit();
-  }, [trackPageVisit]);
+  const { t } = useTranslation();
 
   function handleTabSwitch(newTab: Tab) {
     setTab(newTab);
-    trackTabSwitch(newTab === 'calculator' ? '⚔️ Damage' : '🎲 Dice');
   }
 
   return (
@@ -100,7 +94,7 @@ export default function Home() {
                     ? 'bg-gold-900/60 text-gold-300 border-r border-gold-700'
                     : 'bg-surface text-muted hover:text-white border-r border-border'}`}
               >
-                ⚔️ Damage
+                {t('tabs.damage')}
               </button>
               <button
                 id="tab-dice"
@@ -112,7 +106,7 @@ export default function Home() {
                     ? 'bg-gold-900/60 text-gold-300'
                     : 'bg-surface text-muted hover:text-white'}`}
               >
-                🎲 Dice
+                {t('tabs.dice')}
               </button>
             </nav>
           </div>

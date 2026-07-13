@@ -8,6 +8,7 @@
 
 import React, { useState } from 'react';
 import { useAppContext } from '@/context/AppContext';
+import { useTranslation } from '@/hooks/useTranslation';
 import type { CritTableEntry } from '@/types/config';
 
 const PRESET_COLORS = [
@@ -21,6 +22,7 @@ const PRESET_COLORS = [
 
 export function SettingsPanel() {
   const { settings, updateSettings, critTable, setCritTable } = useAppContext();
+  const { t, language, setLanguage } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
   const [editingCrit, setEditingCrit] = useState(false);
 
@@ -57,7 +59,7 @@ export function SettingsPanel() {
             <div className="p-6 flex flex-col gap-6">
               {/* Header */}
               <div className="flex items-center justify-between">
-                <h2 className="font-display text-lg font-bold text-gold-400">⚙️ Settings</h2>
+                <h2 className="font-display text-lg font-bold text-gold-400">{t('settings.title')}</h2>
                 <button
                   onClick={() => setIsOpen(false)}
                   className="text-muted hover:text-white transition-colors text-xl"
@@ -66,9 +68,29 @@ export function SettingsPanel() {
                 </button>
               </div>
 
+              {/* ── Language ───────────────────────────────── */}
+              <section className="flex flex-col gap-3">
+                <div className="flex rounded-lg overflow-hidden border border-border">
+                  <button
+                    onClick={() => setLanguage('en')}
+                    className={`flex-1 py-2 text-xs font-bold transition-all
+                      ${language === 'en' ? 'bg-gold-900 text-gold-300' : 'bg-surface text-muted'}`}
+                  >
+                    English
+                  </button>
+                  <button
+                    onClick={() => setLanguage('th')}
+                    className={`flex-1 py-2 text-xs font-bold transition-all
+                      ${language === 'th' ? 'bg-gold-900 text-gold-300' : 'bg-surface text-muted'}`}
+                  >
+                    ภาษาไทย
+                  </button>
+                </div>
+              </section>
+
               {/* ── Background ───────────────────────────────── */}
               <section className="flex flex-col gap-3">
-                <h3 className="font-semibold text-sm text-white">Background</h3>
+                <h3 className="font-semibold text-sm text-white">{t('settings.background')}</h3>
 
                 {/* Mode toggle */}
                 <div className="flex rounded-lg overflow-hidden border border-border">
@@ -77,14 +99,14 @@ export function SettingsPanel() {
                     className={`flex-1 py-2 text-xs font-bold transition-all
                       ${settings.bgMode === 'color' ? 'bg-gold-900 text-gold-300' : 'bg-surface text-muted'}`}
                   >
-                    Color
+                    {t('settings.color')}
                   </button>
                   <button
                     onClick={() => updateSettings({ bgMode: 'image' })}
                     className={`flex-1 py-2 text-xs font-bold transition-all
                       ${settings.bgMode === 'image' ? 'bg-gold-900 text-gold-300' : 'bg-surface text-muted'}`}
                   >
-                    Image
+                    {t('settings.image')}
                   </button>
                 </div>
 
@@ -106,7 +128,7 @@ export function SettingsPanel() {
                     </div>
                     {/* Custom color */}
                     <div className="flex items-center gap-2">
-                      <label className="text-xs text-muted">Custom:</label>
+                      <label className="text-xs text-muted">{t('settings.custom')}</label>
                       <input
                         type="color"
                         value={settings.bgColor}
@@ -120,7 +142,7 @@ export function SettingsPanel() {
 
                 {settings.bgMode === 'image' && (
                   <div className="flex flex-col gap-2">
-                    <label className="text-xs text-muted">Image URL</label>
+                    <label className="text-xs text-muted">{t('settings.imageUrl')}</label>
                     <input
                       type="text"
                       value={settings.bgImageUrl}
@@ -139,25 +161,25 @@ export function SettingsPanel() {
 
                 {/* Roll Speed */}
                 <div>
-                  <label className="text-xs text-muted mb-1 block">Dice Roll Speed</label>
+                  <label className="text-xs text-muted mb-1 block">{t('settings.rollSpeed')}</label>
                   <select
                     value={settings.rollSpeed}
                     onChange={(e) => updateSettings({ rollSpeed: e.target.value as any })}
                     className="input text-sm py-1.5"
                   >
-                    <option value="instant">Instant(0.1s)</option>
-                    <option value="fast">Fast (0.6s)</option>
-                    <option value="normal">Normal (0.9s)</option>
-                    <option value="slow">Cinematic (1.5s)</option>
+                    <option value="instant">{t('settings.speedInstant')}</option>
+                    <option value="fast">{t('settings.speedFast')}</option>
+                    <option value="normal">{t('settings.speedNormal')}</option>
+                    <option value="slow">{t('settings.speedSlow')}</option>
                   </select>
                 </div>
 
                 {/* Die Cap Toggle */}
                 <div className="flex items-center justify-between">
                   <div>
-                    <label className="text-xs text-muted font-bold">Enforce Max Natural Roll (Cap)</label>
+                    <label className="text-xs text-muted font-bold">{t('settings.dieCapTitle')}</label>
                     <p className="text-[10px] text-muted/70 leading-tight mt-0.5">
-                      Prevents modified totals from exceeding the die's natural maximum (e.g., 1d20+12 caps at 20).
+                      {t('settings.dieCapDesc')}
                     </p>
                   </div>
                   <button
@@ -177,7 +199,7 @@ export function SettingsPanel() {
                 {/* Opacity / Transparency */}
                 <div>
                   <div className="flex justify-between items-center mb-1">
-                    <label className="text-xs text-muted">Overlay Opacity</label>
+                    <label className="text-xs text-muted">{t('settings.opacity')}</label>
                     <span className="text-xs text-white font-mono">
                       {Math.round(settings.bgOpacity * 100)}%
                     </span>
@@ -192,8 +214,8 @@ export function SettingsPanel() {
                     className="w-full accent-gold"
                   />
                   <div className="flex justify-between text-xs text-muted mt-0.5">
-                    <span>Transparent</span>
-                    <span>Opaque</span>
+                    <span>{t('settings.transparent')}</span>
+                    <span>{t('settings.opaque')}</span>
                   </div>
                 </div>
               </section>
@@ -201,23 +223,23 @@ export function SettingsPanel() {
               {/* ── Crit Table ────────────────────────────────── */}
               <section className="flex flex-col gap-3">
                 <div className="flex items-center justify-between">
-                  <h3 className="font-semibold text-sm text-white">Critical Hit Table</h3>
+                  <h3 className="font-semibold text-sm text-white">{t('settings.critTable')}</h3>
                   {!editingCrit ? (
                     <button
                       onClick={() => { setLocalCrit(critTable); setEditingCrit(true); }}
                       className="btn-ghost text-xs"
                     >
-                      Edit
+                      {t('settings.edit')}
                     </button>
                   ) : (
                     <div className="flex gap-2">
-                      <button onClick={handleCritSave} className="btn-gold text-xs px-2 py-1">Save</button>
-                      <button onClick={() => setEditingCrit(false)} className="btn-ghost text-xs">Cancel</button>
+                      <button onClick={handleCritSave} className="btn-gold text-xs px-2 py-1">{t('settings.save')}</button>
+                      <button onClick={() => setEditingCrit(false)} className="btn-ghost text-xs">{t('settings.cancel')}</button>
                     </div>
                   )}
                 </div>
 
-                <div className="flex flex-col gap-2">
+              <div className="flex flex-col gap-2">
                   {(editingCrit ? localCrit : critTable).map((entry, i) => (
                     <div key={i} className="flex items-center gap-2 p-2 rounded-lg bg-surface/60 border border-border">
                       <div className="flex-1">
@@ -232,7 +254,7 @@ export function SettingsPanel() {
                                 setLocalCrit(next);
                               }}
                               className="input w-12 text-xs py-1 text-center"
-                              min={1} max={20}
+                              min={1} max={99}
                             />
                             <span className="text-muted text-xs">–</span>
                             <input
@@ -244,7 +266,7 @@ export function SettingsPanel() {
                                 setLocalCrit(next);
                               }}
                               className="input w-12 text-xs py-1 text-center"
-                              min={1} max={20}
+                              min={1} max={99}
                             />
                           </div>
                         ) : (
@@ -281,14 +303,45 @@ export function SettingsPanel() {
                               setLocalCrit(next);
                             }}
                             className="input text-xs py-1"
-                            placeholder="Label"
+                            placeholder={t('settings.label')}
                           />
                         ) : (
                           entry.label
                         )}
                       </div>
+                      {/* Remove row button (edit mode only) */}
+                      {editingCrit && (
+                        <button
+                          onClick={() => setLocalCrit((prev) => prev.filter((_, idx) => idx !== i))}
+                          className="text-red-500 hover:text-red-400 text-base leading-none px-1 transition-colors"
+                          title="Remove row"
+                          disabled={localCrit.length <= 1}
+                        >
+                          ✕
+                        </button>
+                      )}
                     </div>
                   ))}
+                  {/* Add row button (edit mode only) */}
+                  {editingCrit && (
+                    <button
+                      onClick={() => {
+                        const last = localCrit[localCrit.length - 1];
+                        setLocalCrit((prev) => [
+                          ...prev,
+                          {
+                            minRoll: (last?.maxRoll ?? 20) + 1,
+                            maxRoll: (last?.maxRoll ?? 20) + 1,
+                            multiplier: 1,
+                            label: 'Custom',
+                          },
+                        ]);
+                      }}
+                      className="w-full py-1.5 rounded-lg border border-dashed border-gold-700 text-gold-500 text-xs font-semibold hover:border-gold-400 hover:text-gold-300 transition-colors"
+                    >
+                      + Add Row
+                    </button>
+                  )}
                 </div>
               </section>
 

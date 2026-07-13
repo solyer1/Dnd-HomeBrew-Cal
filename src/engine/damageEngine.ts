@@ -263,8 +263,29 @@ export function calculateDamage(
     });
   }
 
+  // Step 6 — Multiplier Modifiers (user-defined ×N)
+  const multiplierModifiers = input.modifiers.filter((m) => m.type === 'multiplier');
+  const multiplierModifiersTotal = multiplierModifiers.reduce(
+    (product, m) => product * m.value,
+    1,
+  );
+  const afterMultiplierModifiers =
+    multiplierModifiers.length > 0
+      ? afterPercentageModifiers * multiplierModifiersTotal
+      : afterPercentageModifiers;
+
+  if (multiplierModifiers.length > 0) {
+    steps.push({
+      label: 'Multiplier Modifiers',
+      value: afterMultiplierModifiers,
+      detail: multiplierModifiers
+        .map((m) => `${m.label}: ×${m.value}`)
+        .join(', ') + ` (×${multiplierModifiersTotal} combined)`,
+    });
+  }
+
   // Step 7 — Final Damage (rounded)
-  const finalDamage = Math.round(afterPercentageModifiers);
+  const finalDamage = Math.round(afterMultiplierModifiers);
   steps.push({
     label: 'Final Damage',
     value: finalDamage,
@@ -281,6 +302,8 @@ export function calculateDamage(
     afterFlatModifiers: roundTo(afterFlatModifiers, 2),
     percentageModifiersTotal,
     afterPercentageModifiers: roundTo(afterPercentageModifiers, 2),
+    multiplierModifiersTotal,
+    afterMultiplierModifiers: roundTo(afterMultiplierModifiers, 2),
     finalDamage,
     isCrit,
     steps,

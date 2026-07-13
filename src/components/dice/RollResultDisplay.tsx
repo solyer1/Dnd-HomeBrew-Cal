@@ -1,4 +1,6 @@
 'use client';
+import { useTranslation } from '@/hooks/useTranslation';
+
 
 /**
  * RollResultDisplay
@@ -66,6 +68,7 @@ function DieChip({
 }
 
 export function RollResultDisplay({ result, isRolling }: Props) {
+  const { t } = useTranslation();
   const { sendDiceToCalculator } = useAppContext();
   const [sentFlash, setSentFlash] = useState(false);
 
@@ -178,9 +181,7 @@ export function RollResultDisplay({ result, isRolling }: Props) {
       {!isRolling && (
         <>
           <div className="flex items-center justify-between p-3 rounded-xl bg-gold-950/50 border border-gold-700 animate-slide-in">
-            <span className="font-display font-bold text-gold-400">
-              Grand Total
-            </span>
+            <span className="font-display font-bold text-gold-400">{t('dice.grandTotal')}</span>
             <span className="font-display font-bold text-4xl text-gold-300 tabular-nums">
               {result.grandTotal}
             </span>
@@ -215,9 +216,7 @@ export function RollResultDisplay({ result, isRolling }: Props) {
           {/* Nat 20 / Nat 1 callouts */}
           {result.groups.some((g) => g.rolls.some((r) => r.isNat20)) && (
             <div className="text-center py-2 rounded-lg bg-gold-900/30 border border-gold-600 animate-pulse">
-              <span className="text-gold-400 font-display font-bold text-sm">
-                ⭐ NATURAL 20! ⭐
-              </span>
+              <span className="text-gold-400 font-display font-bold text-sm">{t('calc.nat20star')}</span>
             </div>
           )}
           {result.groups.some((g) => g.rolls.some((r) => r.isNat1)) && (

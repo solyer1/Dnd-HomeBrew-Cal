@@ -1,4 +1,5 @@
 'use client';
+import { useTranslation } from '@/hooks/useTranslation';
 
 /**
  * DamageCalculator
@@ -17,7 +18,6 @@ import { generateId } from '@/utils/math';
 import { DiceThrowOverlay } from './DiceThrowOverlay';
 import { rollAllGroups } from '@/engine/diceEngine';
 import type { DiceGroup } from '@/types/dice';
-import { useAnalytics } from '@/hooks/useAnalytics';
 
 const RESISTANCE_OPTIONS: { value: ResistanceState; label: string; color: string }[] = [
   { value: 'none',          label: 'None',          color: 'text-gray-300' },
@@ -67,6 +67,7 @@ function DicePopup({
   onApply: (value: number, target: RollTarget) => void;
   onClose: () => void;
 }) {
+  const { t } = useTranslation();
   const isAttack = state.target === 'attackRoll';
   const finalVal = isAttack ? Math.min(20, Math.max(1, state.total)) : state.total;
   const max = parseInt(state.diceType.replace('d', ''), 10) || 20;
@@ -96,12 +97,12 @@ function DicePopup({
         {/* Nat callout */}
         {hasNat20 && (
           <div className="text-center py-1 rounded-lg bg-gold-900/50 border border-gold-600 animate-pulse">
-            <span className="text-gold-400 font-display font-bold text-sm">⭐ NATURAL 20! ⭐</span>
+            <span className="text-gold-400 font-display font-bold text-sm">{t('calc.nat20star')}</span>
           </div>
         )}
         {hasNat1 && (
           <div className="text-center py-1 rounded-lg bg-red-950/40 border border-red-700">
-            <span className="text-red-400 font-display font-bold text-sm">💀 Natural 1…</span>
+            <span className="text-red-400 font-display font-bold text-sm">💀 {t('calc.critFail')}</span>
           </div>
         )}
 
@@ -148,7 +149,7 @@ function DicePopup({
           </button>
         </div>
 
-        <p className="text-xs text-muted text-center">Click outside to dismiss</p>
+        <p className="text-xs text-muted text-center">{t('calc.clickOutside')}</p>
       </div>
     </div>
   );
@@ -156,6 +157,7 @@ function DicePopup({
 
 // ─── Inline Dice Roller (with popup) ─────────────────────────────────────────
 function MiniDiceRoller({ onApply }: { onApply: (value: number, target: RollTarget) => void }) {
+  const { t } = useTranslation();
   const [diceType, setDiceType] = useState('d8');
   const [quantity, setQuantity] = useState(1);
   const [modifier, setModifier] = useState(0);
@@ -291,9 +293,7 @@ function MiniDiceRoller({ onApply }: { onApply: (value: number, target: RollTarg
                     ? 'bg-blue-700 text-white'
                     : 'bg-surface text-muted hover:text-white'
                 }`}
-              >
-                +sum
-              </button>
+              >{t('calc.modSum')}</button>
               <button
                 onClick={() => setModifierMode('per-die')}
                 title="Add modifier to each individual die"
@@ -302,11 +302,9 @@ function MiniDiceRoller({ onApply }: { onApply: (value: number, target: RollTarg
                     ? 'bg-emerald-700 text-white'
                     : 'bg-surface text-muted hover:text-white'
                 }`}
-              >
-                +each
-              </button>
+              >{t('calc.modEach')}</button>
             </div>
-            <span className="text-xs text-muted">bonus</span>
+            <span className="text-xs text-muted">{t('calc.bonusWord')}</span>
             <input
               type="number"
               value={modifier}
@@ -365,7 +363,7 @@ function MiniDiceRoller({ onApply }: { onApply: (value: number, target: RollTarg
 // ─── Main Calculator ──────────────────────────────────────────────────────────
 export function DamageCalculator() {
   const { critTable, pendingDice, consumePendingDice, settings, statusTypes, damageTypes } = useAppContext();
-  const { trackDamage, trackDiceRoll } = useAnalytics();
+  const { t } = useTranslation();
 
   const [input, setInput] = useState<DamageInput>(DEFAULT_DAMAGE_INPUT);
 
@@ -445,36 +443,8 @@ export function DamageCalculator() {
         : throwOverlay.total,
     };
     setInput(newInput);
-
-    // Compute the effective attack roll inline (mirrors the useMemo below)
-    const atkRoll = settings.enableDieCap
-      ? Math.min(20, Math.max(1, newInput.attackRoll + attackModifier))
-      : Math.max(1, newInput.attackRoll + attackModifier);
-
-    // Send Discord notification after a roll completes
-    const updatedResult = calculateDamage(
-      { ...newInput, attackRoll: atkRoll },
-      critTable,
-      statusTypes,
-    );
-    trackDamage(
-      updatedResult.breakdown.finalDamage,
-      updatedResult.breakdown.isCrit,
-      input.damagePartitions.length,
-    );
-    const sumModifiers = throwOverlay.modifiers?.reduce((a, b) => a + b, 0) || 0;
-    const formula = `${throwOverlay.values.length}${throwOverlay.diceType}${
-      sumModifiers > 0 ? ` + ${sumModifiers}` : sumModifiers < 0 ? ` - ${Math.abs(sumModifiers)}` : ''
-    }`;
-
-    trackDiceRoll(
-      throwOverlay.target === 'attackRoll' ? 'Attack Roll' : 'Base Damage',
-      throwOverlay.total,
-      formula
-    );
-
     setThrowOverlay(null);
-  }, [throwOverlay, input, attackModifier, settings.enableDieCap, critTable, statusTypes, trackDamage, trackDiceRoll]);
+  }, [throwOverlay, input, attackModifier, settings.enableDieCap, critTable, statusTypes]);
 
   // Receive value from Dice tab
   useEffect(() => {
@@ -569,8 +539,8 @@ export function DamageCalculator() {
         <div className="flex items-center gap-3">
           <span className="text-2xl">⚔️</span>
           <div>
-            <h2 className="font-display text-xl font-bold text-gold-400">Damage Calculator</h2>
-            <p className="text-xs text-muted">Updates instantly — no button needed</p>
+            <h2 className="font-display text-xl font-bold text-gold-400">{t('calc.title')}</h2>
+            <p className="text-xs text-muted">{t('calc.subtitle')}</p>
           </div>
         </div>
       </div>
@@ -583,7 +553,7 @@ export function DamageCalculator() {
           <div className="card relative overflow-hidden">
 
             <div className="flex items-center justify-between mb-2">
-              <label className="label mb-0">Base Damage</label>
+              <label className="label mb-0">{t('calc.baseDamage')}</label>
               <div className="flex items-center gap-1 bg-surface2 border border-border rounded overflow-hidden">
                 <input
                   type="number"
@@ -604,9 +574,7 @@ export function DamageCalculator() {
                   onClick={() => triggerThrow('baseDamage')}
                   disabled={throwOverlay !== null}
                   className="text-xs text-gold-400 bg-gold-900/30 hover:bg-gold-900/50 px-2 py-1 border-l border-border transition-colors disabled:opacity-40 font-semibold"
-                >
-                  🎲 Roll
-                </button>
+                >{'🎲 ' + t('calc.roll')}</button>
               </div>
             </div>
 
@@ -616,28 +584,24 @@ export function DamageCalculator() {
               <div className="flex rounded-lg overflow-hidden border border-border text-xs font-semibold">
                 <button
                   onClick={() => setBaseModifierMode('total')}
-                  title="Add bonus once to the roll total"
+                  title={t('calc.modSumDesc')}
                   className={`px-2 py-1 transition-all ${
                     baseModifierMode === 'total'
                       ? 'bg-blue-700 text-white'
                       : 'bg-surface text-muted hover:text-white'
                   }`}
-                >
-                  +sum
-                </button>
+                >{t('calc.modSum')}</button>
                 <button
                   onClick={() => setBaseModifierMode('per-die')}
-                  title="Add bonus to each individual die"
+                  title={t('calc.modEachDesc')}
                   className={`px-2 py-1 transition-all ${
                     baseModifierMode === 'per-die'
                       ? 'bg-emerald-700 text-white'
                       : 'bg-surface text-muted hover:text-white'
                   }`}
-                >
-                  +each
-                </button>
+                >{t('calc.modEach')}</button>
               </div>
-              <span className="text-xs text-muted">bonus</span>
+              <span className="text-xs text-muted">{t('calc.bonusWord')}</span>
               <input
                 type="number"
                 value={baseModifier}
@@ -689,14 +653,12 @@ export function DamageCalculator() {
                 onClick={() => triggerThrow('attackRoll')}
                 disabled={throwOverlay !== null}
                 className="btn-ghost text-xs disabled:opacity-40"
-              >
-                🎲 Roll d20
-              </button>
+              >{'🎲 ' + t('calc.roll') + ' d20'}</button>
             </div>
 
             {/* Bonus modifier row */}
             <div className="flex items-center gap-2 mb-3">
-              <span className="text-xs text-muted font-semibold">Bonus to Hit</span>
+              <span className="text-xs text-muted font-semibold">{t('calc.bonusToHit')}</span>
               <input
                 type="number"
                 value={attackModifier}
@@ -806,7 +768,7 @@ export function DamageCalculator() {
           {/* Target Status Effects */}
           {statusTypes.length > 0 && (
             <div className="card flex flex-col gap-3">
-              <label className="label mb-0">Target Status Effects</label>
+              <label className="label mb-0">{t('calc.targetStatusEffects')}</label>
               <div className="flex flex-wrap gap-2">
                 {statusTypes.map(st => {
                   const isActive = (input.targetStatusTypeIds || []).includes(st.id);
@@ -840,8 +802,8 @@ export function DamageCalculator() {
           {/* Damage Partitions */}
           <div className="card flex flex-col gap-4">
             <div className="flex items-center justify-between">
-              <label className="label mb-0">Damage Distribution & Resistance</label>
-              <button onClick={addPartition} className="btn-ghost text-xs">+ Add Type</button>
+              <label className="label mb-0">{t('calc.distribution')}</label>
+              <button onClick={addPartition} className="btn-ghost text-xs">{t('calc.addPartition')}</button>
             </div>
 
             {totalPercentage !== 100 && (
@@ -910,7 +872,7 @@ export function DamageCalculator() {
                       </div>
                     </div>
                     <div className="w-28 flex flex-col gap-1">
-                      <span className="text-xs text-muted">Percentage</span>
+                      <span className="text-xs text-muted">{t('calc.percentageWord')}</span>
                       <div className="flex items-center gap-1">
                         <input
                           type="number" min="0" max="100"

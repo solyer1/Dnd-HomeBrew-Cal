@@ -1,4 +1,5 @@
 'use client';
+import { useTranslation } from '@/hooks/useTranslation';
 
 /**
  * DiceRoller
@@ -16,7 +17,6 @@ import { RollResultDisplay } from './RollResultDisplay';
 import { RollHistory } from './RollHistory';
 import { DiceThrowOverlay } from '../calculator/DiceThrowOverlay';
 import type { RollResult } from '@/types/dice';
-import { useAnalytics } from '@/hooks/useAnalytics';
 
 const DICE_TYPES: DiceType[] = ['d4', 'd6', 'd8', 'd10', 'd12', 'd20', 'd100'];
 
@@ -31,7 +31,7 @@ const makeDefaultGroup = (): DiceGroup => ({
 
 export function DiceRoller() {
   const { addToHistory, rollHistory, clearHistory, settings } = useAppContext();
-  const { trackDiceRoll } = useAnalytics();
+  const { t } = useTranslation();
 
   const [groups, setGroups] = useState<DiceGroup[]>([makeDefaultGroup()]);
   const [lastResult, setLastResult] = useState<RollResult | null>(null);
@@ -89,10 +89,8 @@ export function DiceRoller() {
     setLastResult(throwOverlay.result);
     const label = rollLabel.trim() || buildLabel(groups);
     addToHistory(label, throwOverlay.result);
-    // Send Discord notification
-    trackDiceRoll(label, throwOverlay.result.grandTotal, buildLabel(groups));
     setThrowOverlay(null);
-  }, [throwOverlay, rollLabel, groups, addToHistory, trackDiceRoll]);
+  }, [throwOverlay, rollLabel, groups, addToHistory]);
 
   return (
     <div className="flex flex-col gap-6">
@@ -100,12 +98,8 @@ export function DiceRoller() {
       <div className="flex items-center gap-3">
         <span className="text-2xl">🎲</span>
         <div>
-          <h2 className="font-display text-xl font-bold text-gold-400">
-            Dice Roller
-          </h2>
-          <p className="text-xs text-muted">
-            Roll · Send to Calculator · See history
-          </p>
+          <h2 className="font-display text-xl font-bold text-gold-400">{t('dice.title')}</h2>
+          <p className="text-xs text-muted">{t('dice.subtitle')}</p>
         </div>
       </div>
 
@@ -114,23 +108,21 @@ export function DiceRoller() {
         <div className="flex flex-col gap-4">
           {/* Roll label */}
           <div className="card">
-            <label className="label">Roll Label (optional)</label>
+            <label className="label">{t('dice.rollLabel')}</label>
             <input
               type="text"
               value={rollLabel}
               onChange={(e) => setRollLabel(e.target.value)}
               className="input w-full"
-              placeholder="e.g. Attack Roll, Damage Roll..."
+              placeholder={t('dice.placeholderLabel')}
             />
           </div>
 
           {/* Dice Groups */}
           <div className="card flex flex-col gap-3">
             <div className="flex items-center justify-between">
-              <label className="label mb-0">Dice Groups</label>
-              <button onClick={addGroup} className="btn-ghost text-xs">
-                + Add Group
-              </button>
+              <label className="label mb-0">{t('dice.diceGroups')}</label>
+              <button onClick={addGroup} className="btn-ghost text-xs">{t('dice.addDice')}</button>
             </div>
 
             {groups.map((group, index) => (

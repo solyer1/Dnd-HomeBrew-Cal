@@ -12,6 +12,7 @@ import React, {
   useContext,
   useState,
   useCallback,
+  useMemo,
   useEffect,
   type ReactNode,
 } from 'react';
@@ -116,25 +117,32 @@ export function AppProvider({ children, initialConfig }: AppProviderProps) {
     setPendingDice(null);
   }, []);
 
+  const value = useMemo<AppContextValue>(() => ({
+    critTable,
+    setCritTable,
+    settings,
+    updateSettings,
+    statusTypes,
+    setStatusTypes,
+    damageTypes,
+    setDamageTypes,
+    rollHistory,
+    addToHistory,
+    clearHistory,
+    pendingDice,
+    sendDiceToCalculator,
+    consumePendingDice,
+  }), [
+    critTable, setCritTable,
+    settings, updateSettings,
+    statusTypes, setStatusTypes,
+    damageTypes, setDamageTypes,
+    rollHistory, addToHistory, clearHistory,
+    pendingDice, sendDiceToCalculator, consumePendingDice,
+  ]);
+
   return (
-    <AppContext.Provider
-      value={{
-        critTable,
-        setCritTable,
-        settings,
-        updateSettings,
-        statusTypes,
-        setStatusTypes,
-        damageTypes,
-        setDamageTypes,
-        rollHistory,
-        addToHistory,
-        clearHistory,
-        pendingDice,
-        sendDiceToCalculator,
-        consumePendingDice,
-      }}
-    >
+    <AppContext.Provider value={value}>
       {children}
     </AppContext.Provider>
   );

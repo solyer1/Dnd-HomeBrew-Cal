@@ -1,4 +1,6 @@
 'use client';
+import { useTranslation } from '@/hooks/useTranslation';
+
 
 /**
  * DamageBreakdownDisplay
@@ -18,6 +20,7 @@ interface Props {
 }
 
 export function DamageBreakdownDisplay({ result, isCrit }: Props) {
+  const { t } = useTranslation();
   const { damageTypes } = useAppContext();
   const { breakdown } = result;
   
@@ -46,16 +49,16 @@ export function DamageBreakdownDisplay({ result, isCrit }: Props) {
         {isFullyImmune ? (
           <div className="text-center">
             <div className="text-4xl mb-2">🛡️</div>
-            <div className="font-display text-2xl font-bold text-purple-400">IMMUNE</div>
-            <div className="text-sm text-muted mt-1">No damage taken</div>
+            <div className="font-display text-2xl font-bold text-purple-400">{t('calc.immune')}</div>
+            <div className="text-sm text-muted mt-1">{t('calc.noDamageTaken')}</div>
           </div>
         ) : (
           <div className="flex flex-col items-center">
             {isCrit && (
               <div className={`text-sm font-bold mb-4 text-center ${breakdown.critMultiplier >= 2.5 ? 'text-gold-400' : 'text-amber-400'}`}>
-                {breakdown.critMultiplier >= 2.5 ? '⭐ NATURAL 20 — CRITICAL!' :
-                 breakdown.critMultiplier >= 2   ? '💥 CRITICAL HIT!' :
-                 '⚡ CRIT HIT'}
+                {breakdown.critMultiplier >= 2.5 ? t('calc.nat20crit') :
+                 breakdown.critMultiplier >= 2   ? t('calc.critHitExclaim') :
+                 t('calc.critHitSmall')}
               </div>
             )}
             
@@ -69,7 +72,7 @@ export function DamageBreakdownDisplay({ result, isCrit }: Props) {
                     <div className="font-display text-4xl font-bold text-white mb-1">
                       {getPartitionFinal(p)}
                     </div>
-                    <div className="text-sm" style={{ color: cfg.color }}>{cfg.label} Damage</div>
+                    <div className="text-sm" style={{ color: cfg.color }}>{cfg.label} {t('calc.damage')}</div>
                   </div>
                 );
               })}
@@ -82,7 +85,7 @@ export function DamageBreakdownDisplay({ result, isCrit }: Props) {
                     'text-white'}`}>
                   {breakdown.finalDamage}
                 </div>
-                <div className="text-sm text-muted mt-2 uppercase tracking-widest font-semibold">Final Damage</div>
+                <div className="text-sm text-muted mt-2 uppercase tracking-widest font-semibold">{t('calc.finalDamage')}</div>
               </div>
 
               {/* Right partitions (remaining half) */}
@@ -94,7 +97,7 @@ export function DamageBreakdownDisplay({ result, isCrit }: Props) {
                     <div className="font-display text-4xl font-bold text-white mb-1">
                       {getPartitionFinal(p)}
                     </div>
-                    <div className="text-sm" style={{ color: cfg.color }}>{cfg.label} Damage</div>
+                    <div className="text-sm" style={{ color: cfg.color }}>{cfg.label} {t('calc.damage')}</div>
                   </div>
                 );
               })}
@@ -105,9 +108,7 @@ export function DamageBreakdownDisplay({ result, isCrit }: Props) {
 
       {/* Step-by-step Breakdown */}
       <div className="card">
-        <h3 className="font-display text-sm font-bold text-gold-400 mb-4">
-          📊 Damage Breakdown
-        </h3>
+        <h3 className="font-display text-sm font-bold text-gold-400 mb-4">{t('calc.damageBreakdown')}</h3>
         <div className="flex flex-col gap-1">
           {breakdown.steps.map((step, i) => {
             const isLast = i === breakdown.steps.length - 1;
@@ -153,13 +154,13 @@ export function DamageBreakdownDisplay({ result, isCrit }: Props) {
       {/* Quick Stats */}
       <div className="grid grid-cols-2 gap-2">
         <div className="card text-center py-3">
-          <div className="text-xs text-muted">Crit ×</div>
+          <div className="text-xs text-muted">{t('calc.critMult')}</div>
           <div className={`font-display text-lg font-bold ${breakdown.critMultiplier > 1 ? 'text-gold-400' : 'text-white'}`}>
             {breakdown.critMultiplier}
           </div>
         </div>
         <div className="card text-center py-3">
-          <div className="text-xs text-muted">Mod %</div>
+          <div className="text-xs text-muted">{t('calc.modPercent')}</div>
           <div className={`font-display text-lg font-bold ${breakdown.percentageModifiersTotal !== 0 ? 'text-emerald-400' : 'text-white'}`}>
             {breakdown.percentageModifiersTotal >= 0 ? '+' : ''}{breakdown.percentageModifiersTotal}%
           </div>

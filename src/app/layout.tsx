@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { Cinzel, Inter } from 'next/font/google';
 import './globals.css';
 import { AppProvider } from '@/context/AppContext';
+import { TranslationProvider } from '@/hooks/useTranslation';
 import { getAdminConfig } from '@/lib/getAdminConfig';
 import type { AdminConfig } from '@/types/config';
 
@@ -40,9 +41,11 @@ export default async function RootLayout({
   return (
     <html lang="en" className={`${cinzel.variable} ${inter.variable}`} suppressHydrationWarning>
       <body className="antialiased" suppressHydrationWarning>
-        <AppProvider initialConfig={initialConfig}>
-          {children}
-        </AppProvider>
+        <TranslationProvider>
+          <AppProvider initialConfig={initialConfig}>
+            {children}
+          </AppProvider>
+        </TranslationProvider>
       </body>
     </html>
   );

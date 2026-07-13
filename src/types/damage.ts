@@ -25,12 +25,12 @@ export type DamageType = string;
 
 // ─── Modifiers ────────────────────────────────────────────────────────────────
 
-/** A single user-defined modifier that can be flat (+damage) or percentage (+%) */
+/** A single user-defined modifier that can be flat (+damage), percentage (+%), or multiplier (×N) */
 export interface DamageModifier {
   id: string;
   label: string;
-  type: 'flat' | 'percentage';
-  value: number; // flat: raw damage; percentage: % (e.g. 20 means +20%)
+  type: 'flat' | 'percentage' | 'multiplier';
+  value: number; // flat: raw damage; percentage: % (e.g. 20 means +20%); multiplier: factor (e.g. 2 means ×2)
 }
 
 // ─── Calculator Input ─────────────────────────────────────────────────────────
@@ -94,6 +94,8 @@ export interface DamageBreakdown {
   afterFlatModifiers: number;
   percentageModifiersTotal: number; // total % applied
   afterPercentageModifiers: number;
+  multiplierModifiersTotal: number; // combined ×N factor (1 = no change)
+  afterMultiplierModifiers: number;
   finalDamage: number;
   isCrit: boolean;
   steps: DamageStep[];

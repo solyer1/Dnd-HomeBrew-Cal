@@ -1,4 +1,6 @@
 'use client';
+import { useTranslation } from '@/hooks/useTranslation';
+
 
 /**
  * DiceThrowOverlay
@@ -79,6 +81,7 @@ export function DiceThrowOverlay({
   isNat1 = false,
   modifiers = [],
 }: DiceThrowProps) {
+  const { t } = useTranslation();
 
   const [phase, setPhase] = useState<'throwing' | 'landed' | 'absorbing' | 'exiting'>('throwing');
   const [scrambleValues, setScrambleValues] = useState<number[]>(values);
@@ -302,9 +305,7 @@ export function DiceThrowOverlay({
           }}
         >
           {isNat20 && (
-            <div className="text-gold-400 font-display font-bold text-sm mb-1 animate-pulse">
-              ⭐ NATURAL 20! ⭐
-            </div>
+            <div className="text-gold-400 font-display font-bold text-sm mb-1 animate-pulse">{t('calc.nat20star')}</div>
           )}
           {isNat1 && (
             <div className="text-red-400 font-display font-bold text-sm mb-1">

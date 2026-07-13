@@ -1,4 +1,6 @@
 'use client';
+import { useTranslation } from '@/hooks/useTranslation';
+
 
 /**
  * RollHistory
@@ -79,6 +81,7 @@ function HistoryEntry({ entry }: { entry: RollHistoryEntry }) {
 }
 
 export function RollHistory({ history, onClear }: Props) {
+  const { t } = useTranslation();
   if (history.length === 0) {
     return (
       <div className="card text-center py-6 text-muted text-sm">
@@ -94,9 +97,7 @@ export function RollHistory({ history, onClear }: Props) {
         <h3 className="font-display text-sm font-bold text-gold-400">
           📜 Roll History ({history.length})
         </h3>
-        <button onClick={onClear} className="btn-ghost text-xs text-red-500 hover:text-red-400">
-          Clear
-        </button>
+        <button onClick={onClear} className="btn-ghost text-xs text-red-500 hover:text-red-400">{t('dice.clearHistory')}</button>
       </div>
       <div className="flex flex-col gap-2 max-h-80 overflow-y-auto pr-1 scrollbar-thin">
         {history.map((entry) => (
