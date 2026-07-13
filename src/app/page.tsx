@@ -128,6 +128,10 @@ export default function Home() {
             <span className="text-gold-600">dnd cal.txt</span>
           </span>
           <span className="opacity-30">|</span>
+          <a href="/guide" className="hover:text-gold-400 transition-colors flex items-center gap-1 font-semibold">
+            📖 Guide
+          </a>
+          <span className="opacity-30">|</span>
           <a href="/admin" className="hover:text-gold-400 transition-colors flex items-center gap-1 font-semibold">
             ⚙️ Admin
           </a>
