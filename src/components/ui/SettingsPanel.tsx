@@ -7,6 +7,7 @@
  */
 
 import React, { useState, useCallback } from 'react';
+import Link from 'next/link';
 import { useAppContext } from '@/context/AppContext';
 import { useTranslation } from '@/hooks/useTranslation';
 import type { CritTableEntry } from '@/types/config';
@@ -59,15 +60,25 @@ export function SettingsPanel() {
 
   return (
     <>
-      {/* Toggle button */}
-      <button
-        id="settings-toggle"
-        onClick={() => setIsOpen((p) => !p)}
-        className="fixed top-4 right-4 z-50 w-10 h-10 rounded-full border border-gold-700 bg-surface/80 backdrop-blur-md flex items-center justify-center text-gold-400 hover:border-gold-400 transition-all shadow-lg"
-        title="Settings"
-      >
-        ⚙️
-      </button>
+      <div className="fixed top-4 right-4 z-50 flex items-center gap-3">
+        {/* Guide button */}
+        <Link
+          href="/guide"
+          className="w-10 h-10 rounded-full border border-gold-700 bg-surface/80 backdrop-blur-md flex items-center justify-center text-gold-400 hover:border-gold-400 transition-all shadow-lg font-bold text-sm"
+          title="User Guide"
+        >
+          ?
+        </Link>
+        {/* Toggle button */}
+        <button
+          id="settings-toggle"
+          onClick={() => setIsOpen((p) => !p)}
+          className="w-10 h-10 rounded-full border border-gold-700 bg-surface/80 backdrop-blur-md flex items-center justify-center text-gold-400 hover:border-gold-400 transition-all shadow-lg"
+          title="Settings"
+        >
+          ⚙️
+        </button>
+      </div>
 
       {/* Panel */}
       {isOpen && (

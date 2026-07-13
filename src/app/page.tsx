@@ -10,7 +10,6 @@ import React, { useState } from 'react';
 import { DamageCalculator } from '@/components/calculator/DamageCalculator';
 import { DiceRoller } from '@/components/dice/DiceRoller';
 import { SettingsPanel } from '@/components/ui/SettingsPanel';
-import { GuideModal } from '@/components/ui/GuideModal';
 import { useAppContext } from '@/context/AppContext';
 import { useTranslation } from '@/hooks/useTranslation';
 
@@ -67,9 +66,6 @@ export default function Home() {
 
       {/* Settings panel */}
       <SettingsPanel />
-
-      {/* Guide modal */}
-      <GuideModal />
 
       {/* Main content */}
       <div className="relative z-10 min-h-screen flex flex-col">
