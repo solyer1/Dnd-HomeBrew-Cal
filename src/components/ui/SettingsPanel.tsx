@@ -6,7 +6,7 @@
  * Comment: "make it I can Change bg image or color and its transparency"
  */
 
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { useAppContext } from '@/context/AppContext';
 import { useTranslation } from '@/hooks/useTranslation';
 import type { CritTableEntry } from '@/types/config';
@@ -28,11 +28,34 @@ export function SettingsPanel() {
 
   // Local crit table editing state
   const [localCrit, setLocalCrit] = useState<CritTableEntry[]>(critTable);
+  // Track which row indices were newly added this session (for persistent glow)
+  const [newRowIndices, setNewRowIndices] = useState<Set<number>>(new Set());
 
   const handleCritSave = () => {
     setCritTable(localCrit);
+    setNewRowIndices(new Set());
     setEditingCrit(false);
   };
+
+  const moveRow = useCallback((from: number, dir: -1 | 1) => {
+    const to = from + dir;
+    setLocalCrit(prev => {
+      if (to < 0 || to >= prev.length) return prev;
+      const next = [...prev];
+      [next[from], next[to]] = [next[to], next[from]];
+      return next;
+    });
+    // Keep glow tracking in sync when rows swap positions
+    setNewRowIndices(prev => {
+      const next = new Set<number>();
+      prev.forEach(idx => {
+        if (idx === from) next.add(to);
+        else if (idx === to) next.add(from);
+        else next.add(idx);
+      });
+      return next;
+    });
+  }, []);
 
   return (
     <>
@@ -240,94 +263,134 @@ export function SettingsPanel() {
                 </div>
 
               <div className="flex flex-col gap-2">
-                  {(editingCrit ? localCrit : critTable).map((entry, i) => (
-                    <div key={i} className="flex items-center gap-2 p-2 rounded-lg bg-surface/60 border border-border">
-                      <div className="flex-1">
-                        {editingCrit ? (
-                          <div className="flex gap-1 items-center">
-                            <input
-                              type="number"
-                              value={localCrit[i].minRoll}
-                              onChange={(e) => {
-                                const next = [...localCrit];
-                                next[i] = { ...next[i], minRoll: Number(e.target.value) };
-                                setLocalCrit(next);
-                              }}
-                              className="input w-12 text-xs py-1 text-center"
-                              min={1} max={99}
-                            />
-                            <span className="text-muted text-xs">–</span>
-                            <input
-                              type="number"
-                              value={localCrit[i].maxRoll}
-                              onChange={(e) => {
-                                const next = [...localCrit];
-                                next[i] = { ...next[i], maxRoll: Number(e.target.value) };
-                                setLocalCrit(next);
-                              }}
-                              className="input w-12 text-xs py-1 text-center"
-                              min={1} max={99}
-                            />
+                  {(editingCrit ? localCrit : critTable).map((entry, i) => {
+                    const isNew = editingCrit && newRowIndices.has(i);
+                    return (
+                      <div
+                        key={i}
+                        className={`flex items-center gap-1 p-2 rounded-lg border transition-all duration-300
+                          ${isNew
+                            ? 'bg-gold-950/50 border-gold-500 shadow-[0_0_14px_rgba(201,168,76,0.5)] animate-pulse'
+                            : 'bg-surface/60 border-border'}`}
+                      >
+                        {/* Up / Down reorder buttons (edit mode only) */}
+                        {editingCrit && (
+                          <div className="flex flex-col gap-0.5 mr-1">
+                            <button
+                              onClick={() => moveRow(i, -1)}
+                              disabled={i === 0}
+                              title="Move up"
+                              className="w-5 h-4 flex items-center justify-center text-[10px] text-muted hover:text-gold-300 disabled:opacity-20 transition-colors leading-none"
+                            >▲</button>
+                            <button
+                              onClick={() => moveRow(i, 1)}
+                              disabled={i === localCrit.length - 1}
+                              title="Move down"
+                              className="w-5 h-4 flex items-center justify-center text-[10px] text-muted hover:text-gold-300 disabled:opacity-20 transition-colors leading-none"
+                            >▼</button>
                           </div>
-                        ) : (
-                          <span className="text-xs text-white">{entry.minRoll}–{entry.maxRoll}</span>
                         )}
-                      </div>
-                      <div>
-                        {editingCrit ? (
-                          <input
-                            type="number"
-                            step={0.1}
-                            value={localCrit[i].multiplier}
-                            onChange={(e) => {
-                              const next = [...localCrit];
-                              next[i] = { ...next[i], multiplier: Number(e.target.value) };
-                              setLocalCrit(next);
+
+                        <div className="flex-1">
+                          {editingCrit ? (
+                            <div className="flex gap-1 items-center">
+                              <input
+                                type="number"
+                                value={localCrit[i].minRoll}
+                                onChange={(e) => {
+                                  const next = [...localCrit];
+                                  next[i] = { ...next[i], minRoll: Number(e.target.value) };
+                                  setLocalCrit(next);
+                                }}
+                                className="input w-12 text-xs py-1 text-center"
+                                min={1} max={99}
+                              />
+                              <span className="text-muted text-xs">–</span>
+                              <input
+                                type="number"
+                                value={localCrit[i].maxRoll}
+                                onChange={(e) => {
+                                  const next = [...localCrit];
+                                  next[i] = { ...next[i], maxRoll: Number(e.target.value) };
+                                  setLocalCrit(next);
+                                }}
+                                className="input w-12 text-xs py-1 text-center"
+                                min={1} max={99}
+                              />
+                            </div>
+                          ) : (
+                            <span className="text-xs text-white">{entry.minRoll}–{entry.maxRoll}</span>
+                          )}
+                        </div>
+
+                        <div>
+                          {editingCrit ? (
+                            <input
+                              type="number"
+                              step={0.1}
+                              value={localCrit[i].multiplier}
+                              onChange={(e) => {
+                                const next = [...localCrit];
+                                next[i] = { ...next[i], multiplier: Number(e.target.value) };
+                                setLocalCrit(next);
+                              }}
+                              className="input w-16 text-xs py-1 text-center"
+                            />
+                          ) : (
+                            <span className={`text-sm font-bold ${entry.multiplier > 1 ? 'text-gold-400' : 'text-white'}`}>
+                              ×{entry.multiplier}
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="text-xs text-muted w-20 text-right">
+                          {editingCrit ? (
+                            <input
+                              type="text"
+                              value={localCrit[i].label ?? ''}
+                              onChange={(e) => {
+                                const next = [...localCrit];
+                                next[i] = { ...next[i], label: e.target.value };
+                                setLocalCrit(next);
+                              }}
+                              className="input text-xs py-1"
+                              placeholder={t('settings.label')}
+                            />
+                          ) : (
+                            <span className={isNew ? 'text-gold-400 font-semibold' : ''}>{entry.label}</span>
+                          )}
+                        </div>
+
+                        {/* Remove row button (edit mode only) */}
+                        {editingCrit && (
+                          <button
+                            onClick={() => {
+                              setNewRowIndices(prev => {
+                                const next = new Set<number>();
+                                prev.forEach(idx => { if (idx !== i) next.add(idx > i ? idx - 1 : idx); });
+                                return next;
+                              });
+                              setLocalCrit(prev => prev.filter((_, idx) => idx !== i));
                             }}
-                            className="input w-16 text-xs py-1 text-center"
-                          />
-                        ) : (
-                          <span className={`text-sm font-bold ${entry.multiplier > 1 ? 'text-gold-400' : 'text-white'}`}>
-                            ×{entry.multiplier}
-                          </span>
+                            className="text-red-500 hover:text-red-400 text-base leading-none px-1 transition-colors"
+                            title="Remove row"
+                            disabled={localCrit.length <= 1}
+                          >
+                            ✕
+                          </button>
                         )}
                       </div>
-                      <div className="text-xs text-muted w-20 text-right">
-                        {editingCrit ? (
-                          <input
-                            type="text"
-                            value={localCrit[i].label ?? ''}
-                            onChange={(e) => {
-                              const next = [...localCrit];
-                              next[i] = { ...next[i], label: e.target.value };
-                              setLocalCrit(next);
-                            }}
-                            className="input text-xs py-1"
-                            placeholder={t('settings.label')}
-                          />
-                        ) : (
-                          entry.label
-                        )}
-                      </div>
-                      {/* Remove row button (edit mode only) */}
-                      {editingCrit && (
-                        <button
-                          onClick={() => setLocalCrit((prev) => prev.filter((_, idx) => idx !== i))}
-                          className="text-red-500 hover:text-red-400 text-base leading-none px-1 transition-colors"
-                          title="Remove row"
-                          disabled={localCrit.length <= 1}
-                        >
-                          ✕
-                        </button>
-                      )}
-                    </div>
-                  ))}
+                    );
+                  })}
+
                   {/* Add row button (edit mode only) */}
                   {editingCrit && (
                     <button
                       onClick={() => {
                         const last = localCrit[localCrit.length - 1];
-                        setLocalCrit((prev) => [
+                        const newIdx = localCrit.length;
+                        setNewRowIndices(prev => new Set([...prev, newIdx]));
+                        setLocalCrit(prev => [
                           ...prev,
                           {
                             minRoll: (last?.maxRoll ?? 20) + 1,
