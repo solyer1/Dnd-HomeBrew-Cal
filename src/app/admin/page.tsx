@@ -137,9 +137,11 @@ function LoginScreen({ onLogin }: { onLogin: () => void }) {
 
 function StatusTypesTab({
   statusTypes,
+  damageTypes,
   onChange,
 }: {
   statusTypes: StatusType[];
+  damageTypes: DamageTypeConfig[];
   onChange: (types: StatusType[]) => void;
 }) {
   function addNew() {
@@ -157,6 +159,15 @@ function StatusTypesTab({
 
   function remove(id: string) {
     onChange(statusTypes.filter((s) => s.id !== id));
+  }
+
+  // Toggle a damage type id in an array field
+  function toggleDmgType(id: string, field: 'immuneDamageTypes' | 'resistDamageTypes' | 'vulnDamageTypes', typeId: string) {
+    const s = statusTypes.find(x => x.id === id);
+    if (!s) return;
+    const current = s[field] ?? [];
+    const next = current.includes(typeId) ? current.filter(x => x !== typeId) : [...current, typeId];
+    update(id, { [field]: next });
   }
 
   return (
@@ -265,6 +276,11 @@ function StatusTypesTab({
 
             {s.mode === 'calculation' && (
               <>
+                {/* ── Attacker Effects ── */}
+                <div style={{ width: '100%', borderTop: '1px solid rgba(100,116,139,0.2)', paddingTop: '0.5rem', marginTop: '0.25rem' }}>
+                  <span style={{ color: '#64748b', fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>⚔️ Attacker Effects</span>
+                </div>
+
                 <FieldGroup label="Atk Roll Mod (e.g. -5)">
                   <input
                     type="number" step={0.5}
@@ -273,7 +289,35 @@ function StatusTypesTab({
                     style={{ ...inputStyle, width: 80, textAlign: 'center' }}
                   />
                 </FieldGroup>
-                
+
+                <FieldGroup label="Advantage (Roll 2d20 High)">
+                  <button
+                    onClick={() => update(s.id, { advantage: !s.advantage })}
+                    style={{
+                      ...checkToggleStyle,
+                      background: s.advantage ? 'rgba(201,168,76,0.2)' : 'transparent',
+                      color: s.advantage ? '#c9a84c' : '#64748b',
+                      border: `1px solid ${s.advantage ? '#c9a84c' : 'rgba(100,116,139,0.35)'}`,
+                    }}
+                  >
+                    {s.advantage ? '✅ On' : '○ Off'}
+                  </button>
+                </FieldGroup>
+
+                <FieldGroup label="Disadvantage (Roll 2d20 Low)">
+                  <button
+                    onClick={() => update(s.id, { disadvantage: !s.disadvantage })}
+                    style={{
+                      ...checkToggleStyle,
+                      background: s.disadvantage ? 'rgba(239,68,68,0.15)' : 'transparent',
+                      color: s.disadvantage ? '#fca5a5' : '#64748b',
+                      border: `1px solid ${s.disadvantage ? 'rgba(239,68,68,0.5)' : 'rgba(100,116,139,0.35)'}`,
+                    }}
+                  >
+                    {s.disadvantage ? '✅ On' : '○ Off'}
+                  </button>
+                </FieldGroup>
+
                 <FieldGroup label="Crit Override (e.g. 18)">
                   <input
                     type="number" step={1} min={1} max={20}
@@ -304,6 +348,11 @@ function StatusTypesTab({
                   </div>
                 </FieldGroup>
 
+                {/* ── Target Effects ── */}
+                <div style={{ width: '100%', borderTop: '1px solid rgba(100,116,139,0.2)', paddingTop: '0.5rem', marginTop: '0.25rem' }}>
+                  <span style={{ color: '#64748b', fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>🛡️ Target Effects</span>
+                </div>
+
                 <FieldGroup label="Incoming DMG Multiplier">
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                     <input
@@ -315,6 +364,61 @@ function StatusTypesTab({
                     <span style={{ color: '#94a3b8', fontSize: '0.8rem' }}>×</span>
                   </div>
                 </FieldGroup>
+
+                <FieldGroup label="Grants Attacker Advantage">
+                  <button
+                    onClick={() => update(s.id, { targetGrantsAdvantage: !s.targetGrantsAdvantage })}
+                    style={{
+                      ...checkToggleStyle,
+                      background: s.targetGrantsAdvantage ? 'rgba(201,168,76,0.2)' : 'transparent',
+                      color: s.targetGrantsAdvantage ? '#c9a84c' : '#64748b',
+                      border: `1px solid ${s.targetGrantsAdvantage ? '#c9a84c' : 'rgba(100,116,139,0.35)'}`,
+                    }}
+                  >
+                    {s.targetGrantsAdvantage ? '✅ On' : '○ Off'}
+                  </button>
+                </FieldGroup>
+
+                <FieldGroup label="Grants Attacker Auto-Crit">
+                  <button
+                    onClick={() => update(s.id, { targetGrantsAutoCrit: !s.targetGrantsAutoCrit })}
+                    style={{
+                      ...checkToggleStyle,
+                      background: s.targetGrantsAutoCrit ? 'rgba(201,168,76,0.2)' : 'transparent',
+                      color: s.targetGrantsAutoCrit ? '#c9a84c' : '#64748b',
+                      border: `1px solid ${s.targetGrantsAutoCrit ? '#c9a84c' : 'rgba(100,116,139,0.35)'}`,
+                    }}
+                  >
+                    {s.targetGrantsAutoCrit ? '✅ On' : '○ Off'}
+                  </button>
+                </FieldGroup>
+
+                {/* Damage Type Overrides */}
+                {damageTypes.length > 0 && (
+                  <>
+                    <DmgTypeMultiSelect
+                      label="Immune to Damage Types"
+                      damageTypes={damageTypes}
+                      selected={s.immuneDamageTypes ?? []}
+                      onToggle={(typeId) => toggleDmgType(s.id, 'immuneDamageTypes', typeId)}
+                      accentColor="#64748b"
+                    />
+                    <DmgTypeMultiSelect
+                      label="Resists Damage Types (÷2)"
+                      damageTypes={damageTypes}
+                      selected={s.resistDamageTypes ?? []}
+                      onToggle={(typeId) => toggleDmgType(s.id, 'resistDamageTypes', typeId)}
+                      accentColor="#60a5fa"
+                    />
+                    <DmgTypeMultiSelect
+                      label="Vulnerable to Damage Types (×2)"
+                      damageTypes={damageTypes}
+                      selected={s.vulnDamageTypes ?? []}
+                      onToggle={(typeId) => toggleDmgType(s.id, 'vulnDamageTypes', typeId)}
+                      accentColor="#f87171"
+                    />
+                  </>
+                )}
               </>
             )}
 
@@ -734,6 +838,44 @@ function DangerZoneTab({ onReset }: { onReset: () => void }) {
   );
 }
 
+// ─── DmgType Multi-Select Sub-component ─────────────────────────────────────
+
+function DmgTypeMultiSelect({
+  label, damageTypes, selected, onToggle, accentColor,
+}: {
+  label: string;
+  damageTypes: DamageTypeConfig[];
+  selected: string[];
+  onToggle: (id: string) => void;
+  accentColor: string;
+}) {
+  return (
+    <FieldGroup label={label} style={{ flexBasis: '100%', width: '100%' }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
+        {damageTypes.map(dt => {
+          const active = selected.includes(dt.id);
+          return (
+            <button
+              key={dt.id}
+              onClick={() => onToggle(dt.id)}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: '0.3rem',
+                padding: '0.25rem 0.6rem', borderRadius: '999px', fontSize: '0.78rem',
+                cursor: 'pointer', border: `1px solid ${active ? accentColor : 'rgba(100,116,139,0.35)'}`,
+                background: active ? `${accentColor}20` : 'transparent',
+                color: active ? accentColor : '#64748b',
+                transition: 'all 0.15s',
+              }}
+            >
+              {dt.icon} {dt.label}
+            </button>
+          );
+        })}
+      </div>
+    </FieldGroup>
+  );
+}
+
 // ─── Shared micro-components ──────────────────────────────────────────────────
 
 function SegmentedControl({
@@ -787,6 +929,11 @@ function EmptyState({ icon, text }: { icon: string; text: string }) {
 }
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
+
+const checkToggleStyle: React.CSSProperties = {
+  padding: '0.35rem 0.75rem', borderRadius: '0.4rem', cursor: 'pointer',
+  fontSize: '0.8rem', fontWeight: 600, transition: 'all 0.15s',
+};
 
 const card: React.CSSProperties = {
   padding: '1.25rem', borderRadius: '0.75rem',
@@ -1031,6 +1178,7 @@ export default function AdminPage() {
           {activeTab === 'status' && (
             <StatusTypesTab
               statusTypes={config.statusTypes}
+              damageTypes={config.damageTypes}
               onChange={(types) => setConfig((c) => ({ ...c, statusTypes: types }))}
             />
           )}

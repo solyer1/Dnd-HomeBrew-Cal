@@ -390,7 +390,24 @@ export function DamageCalculator() {
 
   const triggerThrow = useCallback((target: RollTarget) => {
     if (target === 'attackRoll') {
-      const roll = Math.floor(Math.random() * 20) + 1;
+      // Roll 2d20 if advantage or disadvantage is active
+      const roll1 = Math.floor(Math.random() * 20) + 1;
+      const roll2 = Math.floor(Math.random() * 20) + 1;
+      
+      // Pick the right die based on rollMode (need to access it — recompute inline)
+      const activeAttacker = (input.attackerStatusTypeIds || [])
+        .map(id => statusTypes.find(s => s.id === id))
+        .filter((s): s is (typeof statusTypes)[0] => s !== undefined);
+      const activeTarget = (input.targetStatusTypeIds || [])
+        .map(id => statusTypes.find(s => s.id === id))
+        .filter((s): s is (typeof statusTypes)[0] => s !== undefined);
+      const hasAdv = activeAttacker.some(s => s.advantage) || activeTarget.some(s => s.targetGrantsAdvantage);
+      const hasDis = activeAttacker.some(s => s.disadvantage);
+      const mode = hasAdv && !hasDis ? 'advantage' : hasDis && !hasAdv ? 'disadvantage' : 'normal';
+
+      const roll = mode === 'advantage' ? Math.max(roll1, roll2)
+        : mode === 'disadvantage' ? Math.min(roll1, roll2)
+        : roll1;
       
       const rawTotal = roll + attackModifier;
       const total = settings.enableDieCap 
@@ -399,7 +416,7 @@ export function DamageCalculator() {
       
       setThrowOverlay({
         target,
-        values: [roll],
+        values: mode !== 'normal' ? [roll1, roll2] : [roll],
         total: total,
         diceType: 'd20',
         isNat20: roll === 20,
@@ -467,6 +484,21 @@ export function DamageCalculator() {
   const effectiveAttackRoll = settings.enableDieCap 
     ? Math.min(20, Math.max(1, input.attackRoll + attackModifier))
     : Math.max(1, input.attackRoll + attackModifier);
+
+  // Derive advantage/disadvantage from active statuses (dnd cal.txt line 13-17)
+  const activeAttackerStatuses = (input.attackerStatusTypeIds || [])
+    .map(id => statusTypes.find(s => s.id === id))
+    .filter((s): s is (typeof statusTypes)[0] => s !== undefined);
+  const activeTargetStatuses = (input.targetStatusTypeIds || [])
+    .map(id => statusTypes.find(s => s.id === id))
+    .filter((s): s is (typeof statusTypes)[0] => s !== undefined);
+
+  const hasAdvantage = activeAttackerStatuses.some(s => s.advantage) || activeTargetStatuses.some(s => s.targetGrantsAdvantage);
+  const hasDisadvantage = activeAttackerStatuses.some(s => s.disadvantage);
+  // Advantage + Disadvantage cancel out per dnd cal.txt line 15
+  const rollMode: 'advantage' | 'disadvantage' | 'normal' =
+    hasAdvantage && !hasDisadvantage ? 'advantage' :
+    hasDisadvantage && !hasAdvantage ? 'disadvantage' : 'normal';
     
   const result = useMemo(() => calculateDamage({ ...input, attackRoll: effectiveAttackRoll }, critTable, statusTypes), [input, effectiveAttackRoll, critTable, statusTypes]);
 
@@ -649,11 +681,28 @@ export function DamageCalculator() {
                   </span>
                 )}
               </label>
-              <button
-                onClick={() => triggerThrow('attackRoll')}
-                disabled={throwOverlay !== null}
-                className="btn-ghost text-xs disabled:opacity-40"
-              >{'🎲 ' + t('calc.roll') + ' d20'}</button>
+              <div className="flex items-center gap-2">
+                {rollMode === 'advantage' && (
+                  <span className="text-xs font-bold text-gold-300 bg-gold-900/40 border border-gold-700 px-2 py-0.5 rounded-full animate-pulse">
+                    ⬆️ ADV
+                  </span>
+                )}
+                {rollMode === 'disadvantage' && (
+                  <span className="text-xs font-bold text-red-300 bg-red-900/30 border border-red-700 px-2 py-0.5 rounded-full animate-pulse">
+                    ⬇️ DIS
+                  </span>
+                )}
+                {hasAdvantage && hasDisadvantage && (
+                  <span className="text-xs text-muted bg-surface border border-border px-2 py-0.5 rounded-full">
+                    ADV+DIS = Normal
+                  </span>
+                )}
+                <button
+                  onClick={() => triggerThrow('attackRoll')}
+                  disabled={throwOverlay !== null}
+                  className="btn-ghost text-xs disabled:opacity-40"
+                >{'🎲 ' + t('calc.roll') + ' d20' + (rollMode !== 'normal' ? ` (2d20 ${rollMode === 'advantage' ? 'High' : 'Low'})` : '')}</button>
+              </div>
             </div>
 
             {/* Bonus modifier row */}

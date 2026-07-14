@@ -46,9 +46,13 @@ export interface StatusType {
    */
   mode: 'cosmetic' | 'calculation';
   
-  // Attacker modifiers
+  // ── Attacker modifiers ───────────────────────────────────────────────────────
   /** Modifies the attack roll itself (e.g. -5 for Blind, +4 for Inspired) */
   attackRollModifier?: number;
+  /** Roll 2d20 and take the highest (e.g. Inspired). dnd cal.txt line 13. */
+  advantage?: boolean;
+  /** Roll 2d20 and take the lowest (e.g. Frightened). dnd cal.txt line 59. */
+  disadvantage?: boolean;
   /** Adds flat damage to the final calculation */
   damageFlatModifier?: number;
   /** Replaces the required roll for a critical hit (e.g. 18 for Paralyzed) */
@@ -56,9 +60,19 @@ export interface StatusType {
   /** Outgoing damage multiplier (e.g. 1.5) */
   damageMultiplier: number;
   
-  // Target modifiers
+  // ── Target modifiers ─────────────────────────────────────────────────────────
   /** Incoming damage multiplier (e.g. 1.4 for Charmed) */
   incomingDamageMultiplier?: number;
+  /** Attacker automatically gets advantage when attacking this target (e.g. Paralyzed) */
+  targetGrantsAdvantage?: boolean;
+  /** Attacker automatically scores a critical hit against this target (e.g. Paralyzed) */
+  targetGrantsAutoCrit?: boolean;
+  /** Damage type IDs that this target is immune to (e.g. Wet → Fire Immune) */
+  immuneDamageTypes?: string[];
+  /** Damage type IDs that this target resists (takes half, e.g. Wet → Fire Resistance) */
+  resistDamageTypes?: string[];
+  /** Damage type IDs that this target is vulnerable to (e.g. Wet → Lightning) */
+  vulnDamageTypes?: string[];
 }
 
 /**

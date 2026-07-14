@@ -138,9 +138,15 @@ export function calculateDamage(
     .filter((v): v is number => v !== undefined);
   const lowestCritThreshold = critOverrides.length > 0 ? Math.min(...critOverrides) : undefined;
 
+  // Check if any target status grants auto-crit (e.g. Paralyzed — dnd cal.txt line 45)
+  const autoCritFromTarget = targetStatuses.some(s => s.targetGrantsAutoCrit);
+  // Check if any target status grants advantage to the attacker (e.g. Paralyzed — dnd cal.txt line 45)
+  const advantageFromTarget = targetStatuses.some(s => s.targetGrantsAdvantage);
+
   let rollForCrit = effectiveAttackRoll;
-  if (lowestCritThreshold !== undefined && effectiveAttackRoll >= lowestCritThreshold) {
-    // If the effective roll meets the overridden crit threshold, treat it as a max roll (20) for the crit table
+  if (autoCritFromTarget) {
+    rollForCrit = 20; // Force best crit tier
+  } else if (lowestCritThreshold !== undefined && effectiveAttackRoll >= lowestCritThreshold) {
     rollForCrit = 20;
   }
 
@@ -151,10 +157,19 @@ export function calculateDamage(
   );
   const afterCrit = baseDamage * critMultiplier;
   const isCrit = critMultiplier > 1;
+  
+  // Build detail string, noting any active target-grants-advantage or auto-crit
+  const critDetailExtras: string[] = [];
+  if (autoCritFromTarget) critDetailExtras.push('🎯 Auto-Crit (Target Status)');
+  if (advantageFromTarget) critDetailExtras.push('⬆️ Advantage (Target Status)');
+  
   steps.push({
     label: 'Critical Multiplier',
     value: afterCrit,
-    detail: `${baseDamage} × ${critMultiplier} — ${critLabel} (Roll: ${effectiveAttackRoll}${attackRollBonus !== 0 ? ` [${input.attackRoll}${formatSigned(attackRollBonus)}]` : ''})`,
+    detail: [
+      `${baseDamage} × ${critMultiplier} — ${critLabel} (Roll: ${effectiveAttackRoll}${attackRollBonus !== 0 ? ` [${input.attackRoll}${formatSigned(attackRollBonus)}]` : ''})`,
+      ...critDetailExtras,
+    ].join(' | '),
   });
 
   // Step 3 — Partitions & Resistance
@@ -165,12 +180,33 @@ export function calculateDamage(
     // True damage normally ignores resistance, but we rely on user input (default resistance state)
     // If they set it to resistance, it will resist. By default they should set it to 'none'.
     const allocated = afterCrit * (partition.percentage / 100);
+    
+    // Check if any target status overrides resistance for this damage type
+    let resistanceState = partition.resistanceState;
+    let vulnerabilityStacks = partition.vulnerabilityStacks;
+    let resistanceStacks = partition.resistanceStacks;
+    
+    const typeId = partition.damageType;
+    const isImmunedByStatus = targetStatuses.some(s => s.immuneDamageTypes?.includes(typeId));
+    const isResistedByStatus = targetStatuses.some(s => s.resistDamageTypes?.includes(typeId));
+    const isVulnerableByStatus = targetStatuses.some(s => s.vulnDamageTypes?.includes(typeId));
+    
+    if (isImmunedByStatus) {
+      resistanceState = 'immunity';
+    } else if (isResistedByStatus && resistanceState !== 'immunity') {
+      resistanceState = 'resistance';
+      resistanceStacks = Math.max(partition.resistanceStacks, 1);
+    } else if (isVulnerableByStatus && resistanceState === 'none') {
+      resistanceState = 'vulnerability';
+      vulnerabilityStacks = Math.max(partition.vulnerabilityStacks, 1);
+    }
+    
     const { multiplier: resMult, label: resLabel } = getResistanceMultiplier(
-      partition.resistanceState,
-      partition.vulnerabilityStacks,
-      partition.resistanceStacks
+      resistanceState,
+      vulnerabilityStacks,
+      resistanceStacks
     );
-    const isImmune = partition.resistanceState === 'immunity';
+    const isImmune = resistanceState === 'immunity';
     const afterResist = isImmune ? 0 : allocated * resMult;
     
     partitionBreakdowns.push({
