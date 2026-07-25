@@ -30,4 +30,4 @@ export const DEFAULT_DAMAGE_INPUT: DamageInput = {
   modifiers: [],
 };
 
-export const MAX_ROLL_HISTORY = 20;
+export const MAX_ROLL_HISTORY = 200;

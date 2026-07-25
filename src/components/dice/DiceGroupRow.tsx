@@ -38,7 +38,7 @@ export function DiceGroupRow({ group, diceTypes, index, onUpdate, onRemove }: Pr
             {group.quantity}
           </span>
           <button
-            onClick={() => onUpdate({ quantity: Math.min(20, group.quantity + 1) })}
+            onClick={() => onUpdate({ quantity: group.quantity + 1 })}
             className="w-7 h-7 rounded flex items-center justify-center bg-surface border border-border text-muted hover:text-white transition-colors"
           >
             +

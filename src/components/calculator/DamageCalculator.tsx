@@ -260,7 +260,7 @@ function MiniDiceRoller({ onApply }: { onApply: (value: number, target: RollTarg
             >−</button>
             <span className="w-7 text-center font-bold text-sm text-white">{quantity}</span>
             <button
-              onClick={() => setQuantity(q => Math.min(20, q + 1))}
+              onClick={() => setQuantity(q => q + 1)}
               className="w-6 h-6 flex items-center justify-center text-muted hover:text-white font-bold text-base transition-colors"
             >+</button>
           </div>

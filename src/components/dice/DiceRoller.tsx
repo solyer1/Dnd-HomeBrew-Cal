@@ -22,7 +22,7 @@ const DICE_TYPES: DiceType[] = ['d4', 'd6', 'd8', 'd10', 'd12', 'd20', 'd100'];
 
 const makeDefaultGroup = (): DiceGroup => ({
   id: generateId(),
-  diceType: 'd6',
+  diceType: 'd20',
   quantity: 1,
   modifier: 0,
   modifierMode: 'total',
@@ -35,7 +35,7 @@ export function DiceRoller() {
 
   const [groups, setGroups] = useState<DiceGroup[]>([makeDefaultGroup()]);
   const [lastResult, setLastResult] = useState<RollResult | null>(null);
-  
+
   const [throwOverlay, setThrowOverlay] = useState<{
     values: number[];
     total: number;
@@ -44,7 +44,7 @@ export function DiceRoller() {
     result: RollResult;
     groups: DiceGroup[];
   } | null>(null);
-  
+
   const [rollLabel, setRollLabel] = useState('');
 
   const addGroup = useCallback(() => {
@@ -73,7 +73,7 @@ export function DiceRoller() {
         return 0; // If sum mode and multiple dice, we don't animate a single die for it
       });
     });
-    
+
     setThrowOverlay({
       values: flatValues,
       total: result.grandTotal,
