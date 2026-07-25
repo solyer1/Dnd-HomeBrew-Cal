@@ -1,5 +1,6 @@
 'use client';
 import { useTranslation } from '@/hooks/useTranslation';
+import { useHoldAction } from '@/hooks/useHoldAction';
 
 /**
  * DamageCalculator
@@ -167,6 +168,9 @@ function MiniDiceRoller({ onApply }: { onApply: (value: number, target: RollTarg
   const [popup, setPopup] = useState<PopupState | null>(null);
   const [particles, setParticles] = useState<{ id: string; value: number; x: number; y: number }[]>([]);
   const rollBtnRef = useRef<HTMLButtonElement>(null);
+  
+  const decrementQuantity = useHoldAction(() => setQuantity(q => Math.max(1, q - 1)), 300, 50);
+  const incrementQuantity = useHoldAction(() => setQuantity(q => q + 1), 300, 50);
 
   const doRoll = useCallback(async () => {
     if (isRolling) return;
@@ -255,13 +259,25 @@ function MiniDiceRoller({ onApply }: { onApply: (value: number, target: RollTarg
           {/* Quantity */}
           <div className="flex items-center gap-1 bg-surface2 border border-border rounded-lg px-2 py-1">
             <button
-              onClick={() => setQuantity(q => Math.max(1, q - 1))}
-              className="w-6 h-6 flex items-center justify-center text-muted hover:text-white font-bold text-base transition-colors"
+              {...decrementQuantity}
+              className="w-6 h-6 flex items-center justify-center text-muted hover:text-white font-bold text-base transition-colors select-none"
             >−</button>
-            <span className="w-7 text-center font-bold text-sm text-white">{quantity}</span>
+            <input
+              type="number"
+              min="1"
+              value={quantity || ''}
+              onChange={(e) => {
+                const val = parseInt(e.target.value);
+                setQuantity(isNaN(val) ? 0 : Math.max(0, val));
+              }}
+              onBlur={() => {
+                if (!quantity || quantity < 1) setQuantity(1);
+              }}
+              className="w-10 py-0.5 text-center font-bold text-sm text-white bg-transparent border border-transparent focus:border-gold-500 focus:outline-none rounded [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+            />
             <button
-              onClick={() => setQuantity(q => q + 1)}
-              className="w-6 h-6 flex items-center justify-center text-muted hover:text-white font-bold text-base transition-colors"
+              {...incrementQuantity}
+              className="w-6 h-6 flex items-center justify-center text-muted hover:text-white font-bold text-base transition-colors select-none"
             >+</button>
           </div>
 
@@ -590,9 +606,8 @@ export function DamageCalculator() {
                 <input
                   type="number"
                   min={1}
-                  max={20}
                   value={baseQty}
-                  onChange={e => setBaseQty(Math.min(20, Math.max(1, Number(e.target.value) || 1)))}
+                  onChange={e => setBaseQty(Math.max(1, Number(e.target.value) || 1))}
                   className="w-8 text-center text-xs bg-transparent py-1 outline-none font-bold text-white"
                 />
                 <select

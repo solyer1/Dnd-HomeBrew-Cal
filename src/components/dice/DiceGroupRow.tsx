@@ -9,6 +9,7 @@ import { useTranslation } from '@/hooks/useTranslation';
 
 import React from 'react';
 import type { DiceGroup, DiceType } from '@/types/dice';
+import { useHoldAction } from '@/hooks/useHoldAction';
 
 interface Props {
   group: DiceGroup;
@@ -20,6 +21,10 @@ interface Props {
 
 export function DiceGroupRow({ group, diceTypes, index, onUpdate, onRemove }: Props) {
   const { t } = useTranslation();
+  
+  const decrementGroup = useHoldAction(() => onUpdate({ quantity: Math.max(1, group.quantity - 1) }), 300, 50);
+  const incrementGroup = useHoldAction(() => onUpdate({ quantity: group.quantity + 1 }), 300, 50);
+
   return (
     <div className="flex flex-col gap-2 p-2 rounded-lg bg-surface/60 border border-border">
       <div className="flex items-center gap-2">
@@ -29,17 +34,27 @@ export function DiceGroupRow({ group, diceTypes, index, onUpdate, onRemove }: Pr
         {/* Quantity */}
         <div className="flex items-center gap-1">
           <button
-            onClick={() => onUpdate({ quantity: Math.max(1, group.quantity - 1) })}
-            className="w-7 h-7 rounded flex items-center justify-center bg-surface border border-border text-muted hover:text-white transition-colors"
+            {...decrementGroup}
+            className="w-7 h-7 rounded flex items-center justify-center bg-surface border border-border text-muted hover:text-white transition-colors select-none"
           >
             −
           </button>
-          <span className="w-8 text-center font-bold text-white text-sm">
-            {group.quantity}
-          </span>
+          <input
+            type="number"
+            min="1"
+            value={group.quantity || ''}
+            onChange={(e) => {
+              const val = parseInt(e.target.value);
+              onUpdate({ quantity: isNaN(val) ? 0 : Math.max(0, val) });
+            }}
+            onBlur={() => {
+              if (!group.quantity || group.quantity < 1) onUpdate({ quantity: 1 });
+            }}
+            className="w-10 py-1 text-center font-bold text-white text-sm bg-transparent border border-transparent focus:border-gold-500 focus:outline-none rounded [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+          />
           <button
-            onClick={() => onUpdate({ quantity: group.quantity + 1 })}
-            className="w-7 h-7 rounded flex items-center justify-center bg-surface border border-border text-muted hover:text-white transition-colors"
+            {...incrementGroup}
+            className="w-7 h-7 rounded flex items-center justify-center bg-surface border border-border text-muted hover:text-white transition-colors select-none"
           >
             +
           </button>

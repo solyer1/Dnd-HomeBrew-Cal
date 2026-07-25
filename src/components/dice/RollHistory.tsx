@@ -23,7 +23,7 @@ function HistoryEntry({ entry }: { entry: RollHistoryEntry }) {
 
   return (
     <div
-      className={`rounded-lg border transition-all duration-200 overflow-hidden
+      className={`shrink-0 rounded-lg border transition-all duration-200 overflow-hidden
         ${hasNat20 ? 'border-gold-700 bg-gold-950/10' :
           hasNat1  ? 'border-red-800 bg-red-950/10' :
           'border-border bg-surface/40'}`}
