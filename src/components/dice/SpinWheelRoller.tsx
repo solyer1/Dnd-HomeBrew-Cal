@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useAppContext } from '@/context/AppContext';
 import { DiceType, RollResult } from '@/types/dice';
 import { useTranslation } from '@/hooks/useTranslation';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import confetti from 'canvas-confetti';
 
 const DICE_TYPES: DiceType[] = ['d4', 'd6', 'd8', 'd10', 'd12', 'd20', 'd100'];
@@ -64,6 +64,7 @@ export function SpinWheelRoller({ onResult }: SpinWheelRollerProps) {
   const [weights, setWeights] = useState<Record<number, number>>({});
   const [isSpinning, setIsSpinning] = useState(false);
   const [rotation, setRotation] = useState(0);
+  const [resultPopup, setResultPopup] = useState<number | null>(null);
 
   useEffect(() => {
     const sides = getDiceSides(selectedDie);
@@ -185,6 +186,9 @@ export function SpinWheelRoller({ onResult }: SpinWheelRollerProps) {
       const label = `Spin Wheel (${selectedDie})`;
       onResult(rollResult, label);
       addToHistory(label, rollResult);
+      
+      setResultPopup(result);
+      setTimeout(() => setResultPopup(null), 2500);
     }, 3500); // Wait for the 3s framer-motion transition + 0.5s buffer
   };
 
@@ -265,6 +269,24 @@ export function SpinWheelRoller({ onResult }: SpinWheelRollerProps) {
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-12 h-12 bg-bg border-[4px] border-gold-700 rounded-full z-20 shadow-inner flex items-center justify-center">
              <div className="w-4 h-4 bg-gold-400 rounded-full"></div>
           </div>
+          
+          <AnimatePresence>
+            {resultPopup !== null && (
+              <motion.div
+                initial={{ scale: 0, opacity: 0, y: 50 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
+                exit={{ scale: 0, opacity: 0, y: -50 }}
+                transition={{ type: 'spring', bounce: 0.5 }}
+                className="absolute inset-0 flex items-center justify-center z-50 pointer-events-none"
+              >
+                <div className="bg-surface/90 backdrop-blur-sm border-[3px] border-gold-400 rounded-full w-40 h-40 flex items-center justify-center shadow-[0_0_50px_rgba(201,168,76,0.8)]">
+                  <span className="text-6xl font-display font-bold text-gold-300 drop-shadow-[0_0_15px_rgba(253,230,138,1)]">
+                    {resultPopup}
+                  </span>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
 
         {/* Controls */}
