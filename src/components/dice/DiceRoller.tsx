@@ -16,6 +16,7 @@ import { DiceGroupRow } from './DiceGroupRow';
 import { RollResultDisplay } from './RollResultDisplay';
 import { RollHistory } from './RollHistory';
 import { DiceThrowOverlay } from '../calculator/DiceThrowOverlay';
+import { SpinWheelRoller } from './SpinWheelRoller';
 import type { RollResult } from '@/types/dice';
 
 const DICE_TYPES: DiceType[] = ['d4', 'd6', 'd8', 'd10', 'd12', 'd20', 'd100'];
@@ -35,6 +36,7 @@ export function DiceRoller() {
 
   const [groups, setGroups] = useState<DiceGroup[]>([makeDefaultGroup()]);
   const [lastResult, setLastResult] = useState<RollResult | null>(null);
+  const [mode, setMode] = useState<'classic' | 'wheel'>('classic');
 
   const [throwOverlay, setThrowOverlay] = useState<{
     values: number[];
@@ -103,8 +105,25 @@ export function DiceRoller() {
         </div>
       </div>
 
+      {/* Sub Tabs */}
+      <div className="flex bg-bg rounded-lg p-1 w-max border border-border">
+        <button 
+          onClick={() => setMode('classic')}
+          className={`px-4 py-2 rounded-md font-bold text-sm transition-all ${mode === 'classic' ? 'bg-gold-700 text-bg shadow-sm' : 'text-muted hover:text-white'}`}
+        >
+          Classic Roller
+        </button>
+        <button 
+          onClick={() => setMode('wheel')}
+          className={`px-4 py-2 rounded-md font-bold text-sm transition-all ${mode === 'wheel' ? 'bg-gold-700 text-bg shadow-sm' : 'text-muted hover:text-white'}`}
+        >
+          Spin Wheel
+        </button>
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* ── Left: Setup ─────────────────────────────────────── */}
+        {mode === 'classic' ? (
         <div className="flex flex-col gap-4">
           {/* Roll label */}
           <div className="card">
@@ -158,6 +177,13 @@ export function DiceRoller() {
             🎲 Roll Dice
           </button>
         </div>
+        ) : (
+          <div className="flex flex-col gap-4">
+            <SpinWheelRoller 
+              onResult={(res) => setLastResult(res)} 
+            />
+          </div>
+        )}
 
         {/* ── Right: Result + History ───────────────────────── */}
         <div className="flex flex-col gap-4">
