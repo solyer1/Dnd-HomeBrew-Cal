@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useAppContext } from '@/context/AppContext';
 import { DiceType, RollResult } from '@/types/dice';
 import { useTranslation } from '@/hooks/useTranslation';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useAnimation, useMotionValue, animate } from 'framer-motion';
 import confetti from 'canvas-confetti';
 
 const DICE_TYPES: DiceType[] = ['d4', 'd6', 'd8', 'd10', 'd12', 'd20', 'd100'];
@@ -63,8 +63,9 @@ export function SpinWheelRoller({ onResult }: SpinWheelRollerProps) {
   const [slots, setSlots] = useState<number[]>([]);
   const [weights, setWeights] = useState<Record<number, number>>({});
   const [isSpinning, setIsSpinning] = useState(false);
-  const [rotation, setRotation] = useState(0);
+  const rotationValue = useMotionValue(0);
   const [resultPopup, setResultPopup] = useState<number | null>(null);
+  const arrowControls = useAnimation();
 
   useEffect(() => {
     const sides = getDiceSides(selectedDie);
@@ -75,7 +76,7 @@ export function SpinWheelRoller({ onResult }: SpinWheelRollerProps) {
     
     setSlots(newSlots);
     setWeights(newWeights);
-    setRotation(0);
+    rotationValue.set(0);
   }, [selectedDie]);
 
   const shuffleSlots = () => {
@@ -130,66 +131,74 @@ export function SpinWheelRoller({ onResult }: SpinWheelRollerProps) {
   const spin = () => {
     if (isSpinning) return;
     setIsSpinning(true);
+    setResultPopup(null);
     
+    const currentRotation = rotationValue.get();
     const spinRotations = 5 * 360; 
     const randomRotation = Math.floor(Math.random() * 360) + spinRotations;
-    const newRotation = rotation + randomRotation;
+    const newRotation = currentRotation + randomRotation;
     
-    setRotation(newRotation);
-    
-    // Ticking sound effect
     const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
-    if (AudioContext) {
-      const ctx = new AudioContext();
-      let ticks = 31; 
-      let delay = 20; 
-      const tickLoop = () => {
-        if (ticks <= 0) return;
-        playTick(ctx);
-        ticks--;
-        delay = delay * 1.1; 
-        setTimeout(tickLoop, delay);
-      };
-      tickLoop();
-    }
+    const ctx = AudioContext ? new AudioContext() : null;
     
-    setTimeout(() => {
-      setIsSpinning(false);
-      
-      const normalizedRotation = newRotation % 360;
-      const topAngle = (360 - normalizedRotation) % 360;
-      
-      const winningSlice = sliceAngles.find(s => topAngle >= s.start && topAngle < s.end);
-      const result = winningSlice ? winningSlice.slot : slots[0];
-      const numSlots = slots.length;
-      
-      // Fire confetti and win sound
-      playWinSound();
-      confetti({
-        particleCount: 100,
-        spread: 70,
-        origin: { y: 0.6 },
-        colors: ['#c9a84c', '#e8c96a', '#a07830', '#fde68a']
-      });
-      
-      const rollResult: RollResult = {
-        groups: [{
-          group: { id: `spin-${Date.now()}`, diceType: selectedDie, quantity: 1, modifier: 0, modifierMode: 'total', label: '' },
-          rolls: [{ value: result, sides: numSlots, isNat20: selectedDie === 'd20' && result === 20, isNat1: selectedDie === 'd20' && result === 1 }],
-          subtotal: result,
-          total: result
-        }],
-        grandTotal: result,
-        timestamp: Date.now()
-      };
-      
-      const label = `Spin Wheel (${selectedDie})`;
-      onResult(rollResult, label);
-      addToHistory(label, rollResult);
-      
-      setResultPopup(result);
-      setTimeout(() => setResultPopup(null), 2500);
-    }, 3500); // Wait for the 3s framer-motion transition + 0.5s buffer
+    let lastSliceIndex = -1;
+
+    animate(rotationValue, newRotation, {
+      duration: 3.5,
+      ease: [0.1, 0.7, 0.1, 1],
+      onUpdate: (latest) => {
+        const normalizedRotation = latest % 360;
+        const topAngle = (360 - normalizedRotation) % 360;
+        const currentSliceIndex = sliceAngles.findIndex(s => topAngle >= s.start && topAngle < s.end);
+        
+        if (currentSliceIndex !== -1 && lastSliceIndex !== -1 && currentSliceIndex !== lastSliceIndex) {
+          // We crossed a slice boundary!
+          if (ctx) playTick(ctx);
+          arrowControls.start({
+            rotate: [0, -25, 0],
+            transition: { duration: 0.15 }
+          });
+        }
+        lastSliceIndex = currentSliceIndex;
+      },
+      onComplete: () => {
+        setIsSpinning(false);
+        
+        const normalizedRotation = newRotation % 360;
+        const topAngle = (360 - normalizedRotation) % 360;
+        
+        const winningSlice = sliceAngles.find(s => topAngle >= s.start && topAngle < s.end);
+        const result = winningSlice ? winningSlice.slot : slots[0];
+        const numSlots = slots.length;
+        
+        // Fire confetti and win sound
+        playWinSound();
+        confetti({
+          particleCount: 100,
+          spread: 70,
+          origin: { y: 0.6 },
+          colors: ['#c9a84c', '#e8c96a', '#a07830', '#fde68a']
+        });
+        
+        const rollResult: RollResult = {
+          groups: [{
+            group: { id: `spin-${Date.now()}`, diceType: selectedDie, quantity: 1, modifier: 0, modifierMode: 'total', label: '' },
+            rolls: [{ value: result, sides: numSlots, isNat20: selectedDie === 'd20' && result === 20, isNat1: selectedDie === 'd20' && result === 1 }],
+            subtotal: result,
+            total: result
+          }],
+          grandTotal: result,
+          timestamp: Date.now()
+        };
+        
+        const label = `Spin Wheel (${selectedDie})`;
+        onResult(rollResult, label);
+        addToHistory(label, rollResult);
+        
+        setResultPopup(result);
+        setTimeout(() => setResultPopup(null), 2500);
+      }
+    });
   };
 
   const numSlots = slots.length;
@@ -227,20 +236,23 @@ export function SpinWheelRoller({ onResult }: SpinWheelRollerProps) {
         {/* Wheel container */}
         <div className="relative flex items-center justify-center">
           {/* Custom CSS Pointer */}
-          <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-20 drop-shadow-[0_4px_6px_rgba(0,0,0,0.6)]">
+          <motion.div 
+            animate={arrowControls}
+            style={{ transformOrigin: 'top center' }}
+            className="absolute -top-3 left-1/2 -translate-x-1/2 z-20 drop-shadow-[0_4px_6px_rgba(0,0,0,0.6)]"
+          >
              <div className="w-0 h-0 border-l-[16px] border-l-transparent border-r-[16px] border-r-transparent border-t-[24px] relative" style={{ borderTopColor: 'var(--color-gold-700)' }}>
                <div className="absolute -top-[24px] -left-[12px] w-0 h-0 border-l-[12px] border-l-transparent border-r-[12px] border-r-transparent border-t-[18px]" style={{ borderTopColor: 'var(--color-surface)' }} />
              </div>
-          </div>
+          </motion.div>
           
           <motion.div 
             className="relative rounded-full border-[6px] border-gold-700 shadow-[0_0_20px_rgba(201,168,76,0.3)] overflow-hidden"
             style={{
               width: '380px', height: '380px',
               background: `conic-gradient(${gradientParts.join(', ')})`,
+              rotate: rotationValue
             }}
-            animate={{ rotate: rotation }}
-            transition={{ duration: 3.5, ease: [0.1, 0.7, 0.1, 1] }}
           >
             {/* Inner dots/decorations */}
             <div className="absolute inset-2 rounded-full border border-gold-900/20 z-0 pointer-events-none"></div>
