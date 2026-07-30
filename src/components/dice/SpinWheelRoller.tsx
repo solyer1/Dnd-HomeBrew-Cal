@@ -174,9 +174,12 @@ export function SpinWheelRoller({ onResult }: SpinWheelRollerProps) {
       const rollResult: RollResult = {
         groups: [{
           group: { id: `spin-${Date.now()}`, diceType: selectedDie, quantity: 1, modifier: 0, modifierMode: 'total', label: '' },
-          rolls: [{ value: result, isMax: result === numSlots, isMin: result === 1 }]
+          rolls: [{ value: result, sides: numSlots, isNat20: selectedDie === 'd20' && result === 20, isNat1: selectedDie === 'd20' && result === 1 }],
+          subtotal: result,
+          total: result
         }],
-        grandTotal: result
+        grandTotal: result,
+        timestamp: Date.now()
       };
       
       const label = `Spin Wheel (${selectedDie})`;
