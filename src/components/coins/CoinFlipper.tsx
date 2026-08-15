@@ -51,18 +51,20 @@ export function CoinFlipper() {
         <button
           onClick={() => setGuess('gilga')}
           disabled={isFlipping}
-          className={`px-8 py-3 rounded-xl font-bold border-2 transition-all duration-200 min-w-[120px] text-lg
+          className={`px-8 py-3 rounded-xl font-bold border-2 transition-all duration-200 min-w-[140px] text-lg flex flex-col items-center
             ${guess === 'gilga' ? 'bg-gold-900 border-gold-500 text-gold-300 shadow-gold' : 'bg-surface border-border text-muted hover:border-gold-700 hover:text-white'}`}
         >
-          Gilga
+          <span>Gilga</span>
+          <span className="text-sm font-normal opacity-75 mt-1">(หัว / Heads)</span>
         </button>
         <button
           onClick={() => setGuess('enki')}
           disabled={isFlipping}
-          className={`px-8 py-3 rounded-xl font-bold border-2 transition-all duration-200 min-w-[120px] text-lg
+          className={`px-8 py-3 rounded-xl font-bold border-2 transition-all duration-200 min-w-[140px] text-lg flex flex-col items-center
             ${guess === 'enki' ? 'bg-gold-900 border-gold-500 text-gold-300 shadow-gold' : 'bg-surface border-border text-muted hover:border-gold-700 hover:text-white'}`}
         >
-          Enki
+          <span>Enki</span>
+          <span className="text-sm font-normal opacity-75 mt-1">(ก้อย / Tails)</span>
         </button>
       </div>
 
@@ -102,7 +104,7 @@ export function CoinFlipper() {
               {result === guess ? 'You Guessed Right!' : 'Wrong Guess!'}
             </h3>
             <p className="text-muted mt-2 text-lg">
-              It landed on <span className="font-bold text-white capitalize">{result}</span>.
+              It landed on <span className="font-bold text-white capitalize">{result} {result === 'gilga' ? '(หัว)' : '(ก้อย)'}</span>.
             </p>
           </div>
         )}
