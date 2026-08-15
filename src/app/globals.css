@@ -162,6 +162,14 @@ body {
     scrollbar-width: thin;
     scrollbar-color: var(--color-border) transparent;
   }
+  
+  .preserve-3d {
+    transform-style: preserve-3d;
+  }
+  
+  .backface-hidden {
+    backface-visibility: hidden;
+  }
 }
 
 /* ─── Component Classes ───────────────────────────────────────────────────── */
@@ -665,6 +673,12 @@ body {
   }
 }
 
+@keyframes coin-toss-bounce {
+  0% { transform: translateY(0); }
+  50% { transform: translateY(-300px); }
+  100% { transform: translateY(0); }
+}
+
 /* Impact flash ring on bounce */
 @keyframes impact-ring {
   0% {
@@ -709,6 +723,10 @@ body {
 
 .animate-dice-throw {
   animation: dice-throw 0.9s cubic-bezier(0.22, 0.61, 0.36, 1) forwards;
+}
+
+.animate-coin-toss-bounce {
+  animation: coin-toss-bounce 3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
 }
 
 .animate-dice-shadow {

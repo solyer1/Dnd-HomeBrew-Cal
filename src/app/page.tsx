@@ -9,11 +9,12 @@
 import React, { useState } from 'react';
 import { DamageCalculator } from '@/components/calculator/DamageCalculator';
 import { DiceRoller } from '@/components/dice/DiceRoller';
+import { CoinFlipper } from '@/components/coins/CoinFlipper';
 import { SettingsPanel } from '@/components/ui/SettingsPanel';
 import { useAppContext } from '@/context/AppContext';
 import { useTranslation } from '@/hooks/useTranslation';
 
-type Tab = 'calculator' | 'dice';
+type Tab = 'calculator' | 'dice' | 'coins';
 
 function Background() {
   const { settings } = useAppContext();
@@ -103,10 +104,22 @@ export default function Home() {
                 onClick={() => handleTabSwitch('dice')}
                 className={`px-4 py-2 text-sm font-semibold transition-all duration-200
                   ${tab === 'dice'
+                    ? 'bg-gold-900/60 text-gold-300 border-r border-gold-700'
+                    : 'bg-surface text-muted hover:text-white border-r border-border'}`}
+              >
+                {t('tabs.dice')}
+              </button>
+              <button
+                id="tab-coins"
+                role="tab"
+                aria-selected={tab === 'coins'}
+                onClick={() => handleTabSwitch('coins')}
+                className={`px-4 py-2 text-sm font-semibold transition-all duration-200
+                  ${tab === 'coins'
                     ? 'bg-gold-900/60 text-gold-300'
                     : 'bg-surface text-muted hover:text-white'}`}
               >
-                {t('tabs.dice')}
+                Coin Toss
               </button>
             </nav>
           </div>
@@ -114,7 +127,9 @@ export default function Home() {
 
         {/* ── Content ───────────────────────────────────── */}
         <main className="flex-1 max-w-7xl mx-auto w-full px-4 py-6">
-          {tab === 'calculator' ? <DamageCalculator /> : <DiceRoller />}
+          {tab === 'calculator' && <DamageCalculator />}
+          {tab === 'dice' && <DiceRoller />}
+          {tab === 'coins' && <CoinFlipper />}
         </main>
 
         {/* ── Footer ────────────────────────────────────── */}
