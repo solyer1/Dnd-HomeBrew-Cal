@@ -5,15 +5,29 @@
 // ─── Dice ─────────────────────────────────────────────────────────────────────
 
 /** All supported dice types in the RPG dice roller */
-export type DiceType = 'd4' | 'd6' | 'd8' | 'd10' | 'd12' | 'd20' | 'd100';
+export type DiceType = 'd1' | 'd2' | 'd3' | 'd4' | 'd5' | 'd6' | 'd7' | 'd8' | 'd9' | 'd10' | 'd11' | 'd12' | 'd13' | 'd14' | 'd15' | 'd16' | 'd17' | 'd18' | 'd19' | 'd20' | 'd100';
 
 /** Sides for each dice type */
 export const DICE_SIDES: Record<DiceType, number> = {
+  d1: 1,
+  d2: 2,
+  d3: 3,
   d4: 4,
+  d5: 5,
   d6: 6,
+  d7: 7,
   d8: 8,
+  d9: 9,
   d10: 10,
+  d11: 11,
   d12: 12,
+  d13: 13,
+  d14: 14,
+  d15: 15,
+  d16: 16,
+  d17: 17,
+  d18: 18,
+  d19: 19,
   d20: 20,
   d100: 100,
 };
