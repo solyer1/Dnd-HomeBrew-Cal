@@ -47,11 +47,11 @@ export function CoinFlipper() {
         <p className="text-sm text-muted mt-2">Select Gilga or Enki, then toss the coin!</p>
       </div>
 
-      <div className="flex gap-4">
+      <div className="flex flex-col sm:flex-row w-full px-4 sm:w-auto gap-4">
         <button
           onClick={() => setGuess('gilga')}
           disabled={isFlipping}
-          className={`px-8 py-3 rounded-xl font-bold border-2 transition-all duration-200 min-w-[140px] text-lg flex flex-col items-center
+          className={`w-full sm:min-w-[140px] px-8 py-3 rounded-xl font-bold border-2 transition-all duration-200 text-lg flex flex-col items-center
             ${guess === 'gilga' ? 'bg-gold-900 border-gold-500 text-gold-300 shadow-gold' : 'bg-surface border-border text-muted hover:border-gold-700 hover:text-white'}`}
         >
           <span>Gilga</span>
@@ -60,7 +60,7 @@ export function CoinFlipper() {
         <button
           onClick={() => setGuess('enki')}
           disabled={isFlipping}
-          className={`px-8 py-3 rounded-xl font-bold border-2 transition-all duration-200 min-w-[140px] text-lg flex flex-col items-center
+          className={`w-full sm:min-w-[140px] px-8 py-3 rounded-xl font-bold border-2 transition-all duration-200 text-lg flex flex-col items-center
             ${guess === 'enki' ? 'bg-gold-900 border-gold-500 text-gold-300 shadow-gold' : 'bg-surface border-border text-muted hover:border-gold-700 hover:text-white'}`}
         >
           <span>Enki</span>

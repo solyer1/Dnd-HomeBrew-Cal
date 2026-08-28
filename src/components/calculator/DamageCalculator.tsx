@@ -600,7 +600,7 @@ export function DamageCalculator() {
           {/* Base Damage */}
           <div className="card relative overflow-hidden">
 
-            <div className="flex items-center justify-between mb-2">
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
               <label className="label mb-0">{t('calc.baseDamage')}</label>
               <div className="flex items-center gap-1 bg-surface2 border border-border rounded overflow-hidden">
                 <input
@@ -626,7 +626,7 @@ export function DamageCalculator() {
             </div>
 
             {/* Bonus modifier row */}
-            <div className="flex items-center gap-2 mb-3">
+            <div className="flex flex-wrap items-center gap-2 mb-3">
               {/* +sum / +each toggle */}
               <div className="flex rounded-lg overflow-hidden border border-border text-xs font-semibold">
                 <button
@@ -687,7 +687,7 @@ export function DamageCalculator() {
           {/* Attack Roll */}
           <div className="card relative overflow-hidden">
 
-            <div className="flex items-center justify-between mb-2">
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
               <label className="label mb-0">
                 Attack Roll (d20)
                 {isCrit && (
@@ -721,7 +721,7 @@ export function DamageCalculator() {
             </div>
 
             {/* Bonus modifier row */}
-            <div className="flex items-center gap-2 mb-3">
+            <div className="flex flex-wrap items-center gap-2 mb-3">
               <span className="text-xs text-muted font-semibold">{t('calc.bonusToHit')}</span>
               <input
                 type="number"

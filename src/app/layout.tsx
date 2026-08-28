@@ -26,6 +26,14 @@ export const metadata: Metadata = {
   keywords: ['DnD', 'D&D', 'Damage Calculator', 'Dice Roller', 'RPG', 'Combat', 'Critical Hit'],
 };
 
+import type { Viewport } from 'next';
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+};
+
 // Force this layout to always be dynamically rendered (never cached by Vercel)
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;

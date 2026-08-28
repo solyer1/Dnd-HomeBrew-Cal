@@ -106,16 +106,16 @@ export function DiceRoller() {
       </div>
 
       {/* Sub Tabs */}
-      <div className="flex bg-bg rounded-lg p-1 w-max border border-border">
+      <div className="flex flex-wrap sm:flex-nowrap bg-bg rounded-lg p-1 w-full sm:w-max border border-border">
         <button 
           onClick={() => setMode('classic')}
-          className={`px-4 py-2 rounded-md font-bold text-sm transition-all ${mode === 'classic' ? 'bg-gold-700 text-bg shadow-sm' : 'text-muted hover:text-white'}`}
+          className={`flex-1 sm:flex-none px-4 py-2 rounded-md font-bold text-sm transition-all ${mode === 'classic' ? 'bg-gold-700 text-bg shadow-sm' : 'text-muted hover:text-white'}`}
         >
           Classic Roller
         </button>
         <button 
           onClick={() => setMode('wheel')}
-          className={`px-4 py-2 rounded-md font-bold text-sm transition-all ${mode === 'wheel' ? 'bg-gold-700 text-bg shadow-sm' : 'text-muted hover:text-white'}`}
+          className={`flex-1 sm:flex-none px-4 py-2 rounded-md font-bold text-sm transition-all ${mode === 'wheel' ? 'bg-gold-700 text-bg shadow-sm' : 'text-muted hover:text-white'}`}
         >
           Spin Wheel
         </button>

@@ -72,8 +72,8 @@ export default function Home() {
       <div className="relative z-10 min-h-screen flex flex-col">
         {/* ── Header ─────────────────────────────────────── */}
         <header className="sticky top-0 z-30 border-b border-border bg-bg/80 backdrop-blur-xl">
-          <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
-            <div className="flex items-center gap-3">
+          <div className="max-w-7xl mx-auto px-4 py-3 flex flex-col md:flex-row items-center justify-between gap-4">
+            <div className="flex items-center gap-3 self-start md:self-auto">
               <span className="text-2xl">⚔️</span>
               <div>
                 <h1 className="font-display font-bold text-lg text-gold-400 leading-none">
@@ -84,44 +84,46 @@ export default function Home() {
             </div>
 
             {/* Tab bar */}
-            <nav className="flex rounded-lg overflow-hidden border border-border" role="tablist">
-              <button
-                id="tab-calculator"
-                role="tab"
-                aria-selected={tab === 'calculator'}
-                onClick={() => handleTabSwitch('calculator')}
-                className={`px-4 py-2 text-sm font-semibold transition-all duration-200
-                  ${tab === 'calculator'
-                    ? 'bg-gold-900/60 text-gold-300 border-r border-gold-700'
-                    : 'bg-surface text-muted hover:text-white border-r border-border'}`}
-              >
-                {t('tabs.damage')}
-              </button>
-              <button
-                id="tab-dice"
-                role="tab"
-                aria-selected={tab === 'dice'}
-                onClick={() => handleTabSwitch('dice')}
-                className={`px-4 py-2 text-sm font-semibold transition-all duration-200
-                  ${tab === 'dice'
-                    ? 'bg-gold-900/60 text-gold-300 border-r border-gold-700'
-                    : 'bg-surface text-muted hover:text-white border-r border-border'}`}
-              >
-                {t('tabs.dice')}
-              </button>
-              <button
-                id="tab-coins"
-                role="tab"
-                aria-selected={tab === 'coins'}
-                onClick={() => handleTabSwitch('coins')}
-                className={`px-4 py-2 text-sm font-semibold transition-all duration-200
-                  ${tab === 'coins'
-                    ? 'bg-gold-900/60 text-gold-300'
-                    : 'bg-surface text-muted hover:text-white'}`}
-              >
-                Coin Toss
-              </button>
-            </nav>
+            <div className="w-full md:w-auto overflow-x-auto pb-1 -mb-1 scrollbar-hide">
+              <nav className="flex w-max rounded-lg overflow-hidden border border-border" role="tablist">
+                <button
+                  id="tab-calculator"
+                  role="tab"
+                  aria-selected={tab === 'calculator'}
+                  onClick={() => handleTabSwitch('calculator')}
+                  className={`px-4 py-2 text-sm font-semibold transition-all duration-200
+                    ${tab === 'calculator'
+                      ? 'bg-gold-900/60 text-gold-300 border-r border-gold-700'
+                      : 'bg-surface text-muted hover:text-white border-r border-border'}`}
+                >
+                  {t('tabs.damage')}
+                </button>
+                <button
+                  id="tab-dice"
+                  role="tab"
+                  aria-selected={tab === 'dice'}
+                  onClick={() => handleTabSwitch('dice')}
+                  className={`px-4 py-2 text-sm font-semibold transition-all duration-200
+                    ${tab === 'dice'
+                      ? 'bg-gold-900/60 text-gold-300 border-r border-gold-700'
+                      : 'bg-surface text-muted hover:text-white border-r border-border'}`}
+                >
+                  {t('tabs.dice')}
+                </button>
+                <button
+                  id="tab-coins"
+                  role="tab"
+                  aria-selected={tab === 'coins'}
+                  onClick={() => handleTabSwitch('coins')}
+                  className={`px-4 py-2 text-sm font-semibold transition-all duration-200
+                    ${tab === 'coins'
+                      ? 'bg-gold-900/60 text-gold-300'
+                      : 'bg-surface text-muted hover:text-white'}`}
+                >
+                  Coin Toss
+                </button>
+              </nav>
+            </div>
           </div>
         </header>
 
@@ -133,12 +135,12 @@ export default function Home() {
         </main>
 
         {/* ── Footer ────────────────────────────────────── */}
-        <footer className="border-t border-border bg-bg/40 py-3 text-xs text-muted flex items-center justify-center gap-3">
+        <footer className="border-t border-border bg-bg/40 py-4 px-4 text-xs text-muted flex flex-wrap items-center justify-center gap-x-3 gap-y-2 text-center">
           <span>
             D&D Damage Calculator v0.1 · Rules from{' '}
             <span className="text-gold-600">dnd cal.txt</span>
           </span>
-          <span className="opacity-30">|</span>
+          <span className="hidden sm:inline opacity-30">|</span>
           <a href="/guide" className="hover:text-gold-400 transition-colors flex items-center gap-1 font-semibold">
             📖 Guide
           </a>
