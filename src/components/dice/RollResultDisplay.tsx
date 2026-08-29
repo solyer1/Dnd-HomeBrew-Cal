@@ -77,7 +77,7 @@ export function RollResultDisplay({ result, isRolling }: Props) {
     if (target === 'attack') {
       finalVal = Math.min(20, Math.max(1, finalVal));
     }
-    sendDiceToCalculator(finalVal, target);
+    sendDiceToCalculator(finalVal, target, result);
     setSentFlash(true);
     setTimeout(() => setSentFlash(false), 1500);
   };

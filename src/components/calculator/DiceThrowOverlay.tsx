@@ -29,25 +29,32 @@ interface DiceThrowProps {
   isNat1?: boolean;
   /** Optional array of modifiers, one per die */
   modifiers?: number[];
+  /** Optional array indicating which dice were dropped (e.g. from disadvantage) */
+  dropped?: boolean[];
 }
 
-const getDiceSVG = (type: string, phase: string, isNat20: boolean, isNat1: boolean) => {
+const getDiceSVG = (type: string, phase: string, isNat20: boolean, isNat1: boolean, isDropped: boolean = false) => {
   let stroke = 'rgba(201, 168, 76, 0.6)';
   let fill = 'rgba(30, 25, 15, 0.6)';
   let filter = 'none';
 
   if (phase === 'landed') {
-    if (isNat20) {
+    if (isDropped) {
+      stroke = '#71717a'; // Cool silver/gray for dropped dice
+      fill = '#0a0a12';
+      filter = 'none';
+    } else if (isNat20) {
       stroke = '#C9A84C';
       fill = '#382b0f';
-      filter = 'drop-shadow(0 0 10px rgba(201,168,76,0.5))';
+      filter = 'drop-shadow(0 0 15px rgba(201,168,76,0.8))'; // Stronger gold glow
     } else if (isNat1) {
       stroke = '#EF4444';
       fill = '#450a0a';
       filter = 'drop-shadow(0 0 10px rgba(239,68,68,0.5))';
     } else {
-      stroke = '#B49339';
+      stroke = '#C9A84C'; // Base gold
       fill = '#0a0a12';
+      filter = 'drop-shadow(0 0 8px rgba(201,168,76,0.3))'; // Light glow for normal
     }
   }
 
@@ -80,6 +87,7 @@ export function DiceThrowOverlay({
   isNat20 = false,
   isNat1 = false,
   modifiers = [],
+  dropped = [],
 }: DiceThrowProps) {
   const { t } = useTranslation();
 
@@ -183,6 +191,7 @@ export function DiceThrowOverlay({
 
             const isDieNat20 = currentType === 'd20' && renderVal === 20;
             const isDieNat1 = currentType === 'd20' && renderVal === 1;
+            const isDropped = dropped[i] || false;
 
             return (
               <div key={i} className="relative w-16 h-16 flex items-center justify-center">
@@ -244,12 +253,13 @@ export function DiceThrowOverlay({
                     className="absolute inset-0 w-full h-full pointer-events-none"
                     style={{ zIndex: -1 }}
                   >
-                    {getDiceSVG(currentType, phase, isDieNat20, isDieNat1)}
+                    {getDiceSVG(currentType, phase, isDieNat20, isDieNat1, isDropped)}
                   </svg>
                   <span
                     className={`
-                      ${phase === 'landed' && isDieNat20 ? 'text-gold-300' 
-                        : phase === 'landed' && isDieNat1 ? 'text-red-400'
+                      ${phase === 'landed' && isDieNat20 ? 'text-gold-300 drop-shadow-[0_0_8px_rgba(253,230,138,0.8)]' 
+                        : phase === 'landed' && isDieNat1 ? 'text-red-400 drop-shadow-[0_0_8px_rgba(248,113,113,0.8)]'
+                        : phase === 'landed' && isDropped ? 'text-zinc-300' // Silver text for dropped
                         : phase === 'landed' ? 'text-white'
                         : 'text-gold-300'}
                     `}
@@ -275,7 +285,7 @@ export function DiceThrowOverlay({
                 </div>
 
                 {/* Per-die modifier chip shown when landed, animates up in absorbing */}
-                {(phase === 'landed' || phase === 'absorbing') && currentMod !== 0 && (
+                {(phase === 'landed' || phase === 'absorbing') && currentMod !== 0 && !isDropped && (
                   <div 
                     className={`
                       absolute -bottom-6 whitespace-nowrap text-[10px] font-bold text-blue-400

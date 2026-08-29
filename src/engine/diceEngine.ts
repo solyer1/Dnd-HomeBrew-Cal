@@ -38,14 +38,32 @@ export function rollDie(sides: number): IndividualRoll {
 /**
  * Roll all dice in a single group (e.g. 2d6+3).
  */
-export function rollGroup(group: DiceGroup, enableDieCap: boolean = true): RollGroupResult {
+export function rollGroup(group: DiceGroup, enableDieCap: boolean = true, d20Mode: RollMode = 'normal'): RollGroupResult {
   const sides = DICE_SIDES[group.diceType];
-  const rolls: IndividualRoll[] = Array.from({ length: group.quantity }, () =>
-    rollDie(sides),
-  );
-  const subtotal = rolls.reduce((sum, r) => sum + r.value, 0);
+  const rolls: IndividualRoll[] = [];
+  
+  for (let i = 0; i < group.quantity; i++) {
+    if (sides === 20 && d20Mode !== 'normal') {
+      const modeResult = rollD20WithMode(d20Mode);
+      let foundWinner = false;
+      modeResult.rolls.forEach(r => {
+        // Handle identical dice correctly: only one is the winner
+        if (r === modeResult.result && !foundWinner) {
+          rolls.push({ ...r, dropped: false });
+          foundWinner = true;
+        } else {
+          rolls.push({ ...r, dropped: true });
+        }
+      });
+    } else {
+      rolls.push(rollDie(sides));
+    }
+  }
+
+  const activeRolls = rolls.filter(r => !r.dropped);
+  const subtotal = activeRolls.reduce((sum, r) => sum + r.value, 0);
   const rawTotal = group.modifierMode === 'per-die'
-    ? subtotal + group.modifier * group.quantity
+    ? subtotal + group.modifier * activeRolls.length
     : subtotal + group.modifier;
 
   // Cap the final total at the maximum possible natural roll for this group (if enabled)
@@ -64,8 +82,8 @@ export function rollGroup(group: DiceGroup, enableDieCap: boolean = true): RollG
 /**
  * Roll all dice groups and return a complete RollResult.
  */
-export function rollAllGroups(groups: DiceGroup[], enableDieCap: boolean = true): RollResult {
-  const groupResults: RollGroupResult[] = groups.map(g => rollGroup(g, enableDieCap));
+export function rollAllGroups(groups: DiceGroup[], enableDieCap: boolean = true, d20Mode: RollMode = 'normal'): RollResult {
+  const groupResults: RollGroupResult[] = groups.map(g => rollGroup(g, enableDieCap, d20Mode));
   const grandTotal = groupResults.reduce((sum, r) => sum + r.total, 0);
   return {
     groups: groupResults,

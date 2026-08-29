@@ -392,16 +392,18 @@ export function DamageCalculator() {
   // Attack Roll modifier config
   const [attackModifier, setAttackModifier] = useState(0);
   const [hasRolledAttack, setHasRolledAttack] = useState(false);
+  const [manualRollMode, setManualRollMode] = useState<'auto' | 'normal' | 'advantage' | 'disadvantage'>('auto');
 
   // Dice throw overlay state
   const [throwOverlay, setThrowOverlay] = useState<{
     target: RollTarget;
     values: number[];
     total: number;
-    diceType: string;
+    diceType: string | string[];
     isNat20?: boolean;
     isNat1?: boolean;
     modifiers?: number[];
+    dropped?: boolean[];
   } | null>(null);
 
   const triggerThrow = useCallback((target: RollTarget) => {
@@ -419,25 +421,34 @@ export function DamageCalculator() {
         .filter((s): s is (typeof statusTypes)[0] => s !== undefined);
       const hasAdv = activeAttacker.some(s => s.advantage) || activeTarget.some(s => s.targetGrantsAdvantage);
       const hasDis = activeAttacker.some(s => s.disadvantage);
-      const mode = hasAdv && !hasDis ? 'advantage' : hasDis && !hasAdv ? 'disadvantage' : 'normal';
+      const derived = hasAdv && !hasDis ? 'advantage' : hasDis && !hasAdv ? 'disadvantage' : 'normal';
+      const mode = manualRollMode === 'auto' ? derived : manualRollMode;
 
-      const roll = mode === 'advantage' ? Math.max(roll1, roll2)
-        : mode === 'disadvantage' ? Math.min(roll1, roll2)
-        : roll1;
+      const group: DiceGroup = {
+        id: 'calc-attack',
+        diceType: 'd20',
+        quantity: 1,
+        modifier: attackModifier,
+        modifierMode: 'total',
+        label: '',
+      };
       
-      const rawTotal = roll + attackModifier;
-      const total = settings.enableDieCap 
-        ? Math.min(20, Math.max(1, rawTotal))
-        : Math.max(1, rawTotal);
-      
+      const result = rollAllGroups([group], settings.enableDieCap, mode);
+      const rolls = result.groups[0].rolls;
+      const flatValues = rolls.map(r => r.value);
+      const flatTypes = rolls.map(() => 'd20');
+      const flatDropped = rolls.map(r => r.dropped || false);
+      const flatModifiers = rolls.map(() => attackModifier);
+
       setThrowOverlay({
         target,
-        values: mode !== 'normal' ? [roll1, roll2] : [roll],
-        total: total,
-        diceType: 'd20',
-        isNat20: roll === 20,
-        isNat1: roll === 1,
-        modifiers: [attackModifier],
+        values: flatValues,
+        total: result.grandTotal,
+        diceType: flatTypes,
+        isNat20: rolls.some(r => r.isNat20 && !r.dropped),
+        isNat1: rolls.some(r => r.isNat1 && !r.dropped),
+        modifiers: flatModifiers,
+        dropped: flatDropped,
       });
     } else {
       // Use the engine so per-die modifier is correctly applied
@@ -464,7 +475,7 @@ export function DamageCalculator() {
         }),
       });
     }
-  }, [baseQty, baseType, baseModifier, baseModifierMode, settings.enableDieCap, attackModifier, throwOverlay]);
+  }, [baseQty, baseType, baseModifier, baseModifierMode, settings.enableDieCap, attackModifier, throwOverlay, manualRollMode, input, statusTypes]);
 
   const handleThrowComplete = useCallback(() => {
     if (!throwOverlay) return;
@@ -482,16 +493,32 @@ export function DamageCalculator() {
   // Receive value from Dice tab
   useEffect(() => {
     if (pendingDice !== null) {
-      const { value, target } = pendingDice;
+      const { value, target, result } = pendingDice;
       if (target === 'attack') setHasRolledAttack(true);
       
+      let finalValues = [value];
+      let finalTypes = [target === 'attack' ? 'd20' : 'Total'];
+      let finalDropped = [false];
+      let finalModifiers = [0]; // Just basic
+
+      if (result && result.groups.length > 0) {
+        // If we received a full result, we can reconstruct the exact animation!
+        const g = result.groups[0];
+        finalValues = g.rolls.map(r => r.value);
+        finalTypes = g.rolls.map(() => g.group.diceType);
+        finalDropped = g.rolls.map(r => r.dropped || false);
+        finalModifiers = g.rolls.map(() => g.group.modifierMode === 'per-die' ? g.group.modifier : (g.group.quantity === 1 ? g.group.modifier : 0));
+      }
+
       setThrowOverlay({
         target: target === 'attack' ? 'attackRoll' : 'baseDamage',
-        values: [value],
+        values: finalValues,
         total: value,
-        diceType: target === 'attack' ? 'd20' : 'Total',
+        diceType: finalTypes,
         isNat20: target === 'attack' && value >= 20,
         isNat1: target === 'attack' && value <= 1,
+        dropped: finalDropped,
+        modifiers: finalModifiers,
       });
       consumePendingDice();
     }
@@ -512,9 +539,11 @@ export function DamageCalculator() {
   const hasAdvantage = activeAttackerStatuses.some(s => s.advantage) || activeTargetStatuses.some(s => s.targetGrantsAdvantage);
   const hasDisadvantage = activeAttackerStatuses.some(s => s.disadvantage);
   // Advantage + Disadvantage cancel out per dnd cal.txt line 15
-  const rollMode: 'advantage' | 'disadvantage' | 'normal' =
+  const derivedRollMode: 'advantage' | 'disadvantage' | 'normal' =
     hasAdvantage && !hasDisadvantage ? 'advantage' :
     hasDisadvantage && !hasAdvantage ? 'disadvantage' : 'normal';
+  
+  const rollMode = manualRollMode === 'auto' ? derivedRollMode : manualRollMode;
     
   const result = useMemo(() => calculateDamage({ ...input, attackRoll: effectiveAttackRoll }, critTable, statusTypes), [input, effectiveAttackRoll, critTable, statusTypes]);
 
@@ -707,11 +736,17 @@ export function DamageCalculator() {
                     ⬇️ DIS
                   </span>
                 )}
-                {hasAdvantage && hasDisadvantage && (
+                {hasAdvantage && hasDisadvantage && manualRollMode === 'auto' && (
                   <span className="text-xs text-muted bg-surface border border-border px-2 py-0.5 rounded-full">
                     ADV+DIS = Normal
                   </span>
                 )}
+                <div className="flex rounded-lg overflow-hidden border border-border text-[10px] font-semibold">
+                  <button onClick={() => setManualRollMode('auto')} className={`px-2 py-1 transition-all ${manualRollMode === 'auto' ? 'bg-gold-700 text-bg' : 'bg-surface text-muted hover:text-white'}`}>Auto</button>
+                  <button onClick={() => setManualRollMode('normal')} className={`px-2 py-1 transition-all ${manualRollMode === 'normal' ? 'bg-gold-700 text-bg' : 'bg-surface text-muted hover:text-white'}`}>Norm</button>
+                  <button onClick={() => setManualRollMode('advantage')} className={`px-2 py-1 transition-all ${manualRollMode === 'advantage' ? 'bg-gold-700 text-bg' : 'bg-surface text-muted hover:text-white'}`}>Adv</button>
+                  <button onClick={() => setManualRollMode('disadvantage')} className={`px-2 py-1 transition-all ${manualRollMode === 'disadvantage' ? 'bg-gold-700 text-bg' : 'bg-surface text-muted hover:text-white'}`}>Dis</button>
+                </div>
                 <button
                   onClick={() => triggerThrow('attackRoll')}
                   disabled={throwOverlay !== null}
@@ -1026,6 +1061,7 @@ export function DamageCalculator() {
           isNat20={throwOverlay.isNat20}
           isNat1={throwOverlay.isNat1}
           modifiers={throwOverlay.modifiers}
+          dropped={throwOverlay.dropped}
           onComplete={handleThrowComplete}
         />
       )}

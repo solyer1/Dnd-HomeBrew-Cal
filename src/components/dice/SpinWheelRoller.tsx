@@ -53,9 +53,62 @@ const playWinSound = () => {
 
 interface SpinWheelRollerProps {
   onResult: (result: RollResult, label: string) => void;
+  rollMode?: 'normal' | 'advantage' | 'disadvantage';
 }
 
-export function SpinWheelRoller({ onResult }: SpinWheelRollerProps) {
+function WheelVisual({ 
+  rotationValue, gradientParts, sliceAngles, numSlots, arrowControls, size = 380 
+}: any) {
+  const scale = size / 380;
+  return (
+    <div className="relative flex items-center justify-center" style={{ width: size, height: size }}>
+      <div className="absolute inset-0" style={{ transform: `scale(${scale})`, transformOrigin: 'top left', left: '50%', top: '50%', marginLeft: -190 * scale, marginTop: -190 * scale, width: 380, height: 380 }}>
+        <motion.div 
+          animate={arrowControls}
+          style={{ transformOrigin: 'top center' }}
+          className="absolute -top-3 left-1/2 -translate-x-1/2 z-20 drop-shadow-[0_4px_6px_rgba(0,0,0,0.6)]"
+        >
+           <div className="w-0 h-0 border-l-[16px] border-l-transparent border-r-[16px] border-r-transparent border-t-[24px] relative" style={{ borderTopColor: 'var(--color-gold-700)' }}>
+             <div className="absolute -top-[24px] -left-[12px] w-0 h-0 border-l-[12px] border-l-transparent border-r-[12px] border-r-transparent border-t-[18px]" style={{ borderTopColor: 'var(--color-surface)' }} />
+           </div>
+        </motion.div>
+        
+        <motion.div 
+          className="relative rounded-full border-[6px] border-gold-700 shadow-[0_0_20px_rgba(201,168,76,0.3)] overflow-hidden"
+          style={{
+            width: '380px', height: '380px',
+            background: `conic-gradient(${gradientParts.join(', ')})`,
+            rotate: rotationValue
+          }}
+        >
+          <div className="absolute inset-2 rounded-full border border-gold-900/20 z-0 pointer-events-none"></div>
+          
+          {numSlots <= 20 && sliceAngles.map((slice: any, index: number) => {
+            if (slice.weight === 0) return null;
+            const rotateAngle = slice.start + (slice.angle / 2);
+            return (
+              <div
+                key={index}
+                className="absolute top-0 left-0 w-full h-full pointer-events-none"
+                style={{ transform: `rotate(${rotateAngle}deg)` }}
+              >
+                <div className="absolute top-3 left-1/2 -translate-x-1/2 font-display font-bold text-gold-400 text-lg drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)] z-10">
+                  {slice.slot}
+                </div>
+              </div>
+            );
+          })}
+        </motion.div>
+        
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-12 h-12 bg-bg border-[4px] border-gold-700 rounded-full z-20 shadow-inner flex items-center justify-center">
+           <div className="w-4 h-4 bg-gold-400 rounded-full"></div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function SpinWheelRoller({ onResult, rollMode = 'normal' }: SpinWheelRollerProps) {
   const { addToHistory } = useAppContext();
   const { t } = useTranslation();
   
@@ -64,8 +117,17 @@ export function SpinWheelRoller({ onResult }: SpinWheelRollerProps) {
   const [weights, setWeights] = useState<Record<number, number>>({});
   const [isSpinning, setIsSpinning] = useState(false);
   const rotationValue = useMotionValue(0);
+  const rotationValue2 = useMotionValue(0);
   const [resultPopup, setResultPopup] = useState<number | null>(null);
   const arrowControls = useAnimation();
+  const arrowControls2 = useAnimation();
+  
+  const [doubleWheelPopup, setDoubleWheelPopup] = useState<{
+    result1: number | null;
+    result2: number | null;
+    finalResult: number | null;
+    mode: 'advantage' | 'disadvantage';
+  } | null>(null);
 
   useEffect(() => {
     const sides = getDiceSides(selectedDie);
@@ -77,6 +139,7 @@ export function SpinWheelRoller({ onResult }: SpinWheelRollerProps) {
     setSlots(newSlots);
     setWeights(newWeights);
     rotationValue.set(0);
+    rotationValue2.set(0);
   }, [selectedDie]);
 
   const shuffleSlots = () => {
@@ -133,13 +196,90 @@ export function SpinWheelRoller({ onResult }: SpinWheelRollerProps) {
     setIsSpinning(true);
     setResultPopup(null);
     
+    const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+    const ctx = AudioContext ? new AudioContext() : null;
+
+    if (rollMode === 'advantage' || rollMode === 'disadvantage') {
+      setDoubleWheelPopup({ result1: null, result2: null, finalResult: null, mode: rollMode });
+      
+      const newRotation1 = rotationValue.get() + Math.floor(Math.random() * 360) + (5 * 360);
+      const newRotation2 = rotationValue2.get() + Math.floor(Math.random() * 360) + (7 * 360); // spins longer
+      
+      let lastSliceIndex1 = -1;
+      let lastSliceIndex2 = -1;
+
+      animate(rotationValue, newRotation1, {
+        duration: 3.5, ease: [0.1, 0.7, 0.1, 1],
+        onUpdate: (latest) => {
+          const topAngle = (360 - (latest % 360)) % 360;
+          const currentSliceIndex = sliceAngles.findIndex(s => topAngle >= s.start && topAngle < s.end);
+          if (currentSliceIndex !== -1 && lastSliceIndex1 !== -1 && currentSliceIndex !== lastSliceIndex1) {
+            if (ctx) playTick(ctx);
+            arrowControls.start({ rotate: [0, -25, 0], transition: { duration: 0.15 } });
+          }
+          lastSliceIndex1 = currentSliceIndex;
+        }
+      });
+
+      animate(rotationValue2, newRotation2, {
+        duration: 4.5, ease: [0.1, 0.7, 0.1, 1],
+        onUpdate: (latest) => {
+          const topAngle = (360 - (latest % 360)) % 360;
+          const currentSliceIndex = sliceAngles.findIndex(s => topAngle >= s.start && topAngle < s.end);
+          if (currentSliceIndex !== -1 && lastSliceIndex2 !== -1 && currentSliceIndex !== lastSliceIndex2) {
+            if (ctx) playTick(ctx);
+            arrowControls2.start({ rotate: [0, -25, 0], transition: { duration: 0.15 } });
+          }
+          lastSliceIndex2 = currentSliceIndex;
+        },
+        onComplete: () => {
+          setIsSpinning(false);
+          const topAngle1 = (360 - (newRotation1 % 360)) % 360;
+          const winningSlice1 = sliceAngles.find(s => topAngle1 >= s.start && topAngle1 < s.end);
+          const result1 = winningSlice1 ? winningSlice1.slot : slots[0];
+          
+          const topAngle2 = (360 - (newRotation2 % 360)) % 360;
+          const winningSlice2 = sliceAngles.find(s => topAngle2 >= s.start && topAngle2 < s.end);
+          const result2 = winningSlice2 ? winningSlice2.slot : slots[0];
+          
+          const finalResult = rollMode === 'advantage' ? Math.max(result1, result2) : Math.min(result1, result2);
+          
+          setDoubleWheelPopup({ result1, result2, finalResult, mode: rollMode });
+          playWinSound();
+          confetti({
+            particleCount: 150, spread: 80, origin: { y: 0.6 },
+            colors: ['#c9a84c', '#e8c96a', '#a07830', '#fde68a'],
+            zIndex: 1000,
+          });
+
+          const rollResult: RollResult = {
+            groups: [{
+              group: { id: `spin-${Date.now()}`, diceType: selectedDie, quantity: 1, modifier: 0, modifierMode: 'total', label: '' },
+              rolls: [
+                { value: result1, sides: slots.length, isNat20: selectedDie === 'd20' && result1 === 20, isNat1: selectedDie === 'd20' && result1 === 1, dropped: result1 !== finalResult || (result1 === result2 ? false : true) },
+                { value: result2, sides: slots.length, isNat20: selectedDie === 'd20' && result2 === 20, isNat1: selectedDie === 'd20' && result2 === 1, dropped: result2 !== finalResult }
+              ],
+              subtotal: finalResult,
+              total: finalResult
+            }],
+            grandTotal: finalResult,
+            timestamp: Date.now()
+          };
+          
+          const label = `Spin Wheel (${selectedDie}) with ${rollMode}`;
+          onResult(rollResult, label);
+          addToHistory(label, rollResult);
+          
+          setTimeout(() => setDoubleWheelPopup(null), 3500);
+        }
+      });
+      return;
+    }
+
     const currentRotation = rotationValue.get();
     const spinRotations = 5 * 360; 
     const randomRotation = Math.floor(Math.random() * 360) + spinRotations;
     const newRotation = currentRotation + randomRotation;
-    
-    const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
-    const ctx = AudioContext ? new AudioContext() : null;
     
     let lastSliceIndex = -1;
 
@@ -183,7 +323,7 @@ export function SpinWheelRoller({ onResult }: SpinWheelRollerProps) {
         const rollResult: RollResult = {
           groups: [{
             group: { id: `spin-${Date.now()}`, diceType: selectedDie, quantity: 1, modifier: 0, modifierMode: 'total', label: '' },
-            rolls: [{ value: result, sides: numSlots, isNat20: selectedDie === 'd20' && result === 20, isNat1: selectedDie === 'd20' && result === 1 }],
+            rolls: [{ value: result, sides: numSlots, isNat20: selectedDie === 'd20' && result === 20, isNat1: selectedDie === 'd20' && result === 1, dropped: false }],
             subtotal: result,
             total: result
           }],
@@ -235,52 +375,13 @@ export function SpinWheelRoller({ onResult }: SpinWheelRollerProps) {
       <div className="flex flex-col md:flex-row gap-8 items-center justify-center">
         {/* Wheel container */}
         <div className="relative flex items-center justify-center">
-          {/* Custom CSS Pointer */}
-          <motion.div 
-            animate={arrowControls}
-            style={{ transformOrigin: 'top center' }}
-            className="absolute -top-3 left-1/2 -translate-x-1/2 z-20 drop-shadow-[0_4px_6px_rgba(0,0,0,0.6)]"
-          >
-             <div className="w-0 h-0 border-l-[16px] border-l-transparent border-r-[16px] border-r-transparent border-t-[24px] relative" style={{ borderTopColor: 'var(--color-gold-700)' }}>
-               <div className="absolute -top-[24px] -left-[12px] w-0 h-0 border-l-[12px] border-l-transparent border-r-[12px] border-r-transparent border-t-[18px]" style={{ borderTopColor: 'var(--color-surface)' }} />
-             </div>
-          </motion.div>
-          
-          <motion.div 
-            className="relative rounded-full border-[6px] border-gold-700 shadow-[0_0_20px_rgba(201,168,76,0.3)] overflow-hidden"
-            style={{
-              width: '380px', height: '380px',
-              background: `conic-gradient(${gradientParts.join(', ')})`,
-              rotate: rotationValue
-            }}
-          >
-            {/* Inner dots/decorations */}
-            <div className="absolute inset-2 rounded-full border border-gold-900/20 z-0 pointer-events-none"></div>
-            
-            {/* Render numbers if slots <= 20 */}
-            {numSlots <= 20 && sliceAngles.map((slice, index) => {
-              if (slice.weight === 0) return null;
-              const rotateAngle = slice.start + (slice.angle / 2);
-              return (
-                <div
-                  key={index}
-                  className="absolute top-0 left-0 w-full h-full pointer-events-none"
-                  style={{ transform: `rotate(${rotateAngle}deg)` }}
-                >
-                  <div 
-                    className="absolute top-3 left-1/2 -translate-x-1/2 font-display font-bold text-gold-400 text-lg drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)] z-10"
-                  >
-                    {slice.slot}
-                  </div>
-                </div>
-              );
-            })}
-          </motion.div>
-          
-          {/* Center piece */}
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-12 h-12 bg-bg border-[4px] border-gold-700 rounded-full z-20 shadow-inner flex items-center justify-center">
-             <div className="w-4 h-4 bg-gold-400 rounded-full"></div>
-          </div>
+          <WheelVisual 
+            rotationValue={rotationValue}
+            gradientParts={gradientParts}
+            sliceAngles={sliceAngles}
+            numSlots={numSlots}
+            arrowControls={arrowControls}
+          />
           
           <AnimatePresence>
             {resultPopup !== null && (
@@ -367,6 +468,63 @@ export function SpinWheelRoller({ onResult }: SpinWheelRollerProps) {
           </div>
         </div>
       )}
+
+      {/* Double Wheel Popup Overlay */}
+      <AnimatePresence>
+        {doubleWheelPopup !== null && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] flex flex-col items-center justify-center"
+            style={{ backgroundColor: 'rgba(10, 10, 18, 0.85)', backdropFilter: 'blur(6px)' }}
+          >
+            <div className="text-gold-400 font-display font-bold text-2xl uppercase tracking-widest mb-10 drop-shadow-md">
+              Rolling with {doubleWheelPopup.mode === 'advantage' ? 'Advantage' : 'Disadvantage'}
+            </div>
+            
+            <div className="flex items-center justify-center gap-8 w-full max-w-4xl px-4">
+              <div className={`transition-all duration-1000 ${doubleWheelPopup.finalResult !== null && doubleWheelPopup.result1 !== doubleWheelPopup.finalResult ? 'opacity-30 grayscale scale-75' : 'scale-100'}`}>
+                <WheelVisual 
+                  rotationValue={rotationValue}
+                  gradientParts={gradientParts}
+                  sliceAngles={sliceAngles}
+                  numSlots={numSlots}
+                  arrowControls={arrowControls}
+                  size={300}
+                />
+              </div>
+              <div className={`transition-all duration-1000 ${doubleWheelPopup.finalResult !== null && doubleWheelPopup.result2 !== doubleWheelPopup.finalResult ? 'opacity-30 grayscale scale-75' : 'scale-100'}`}>
+                <WheelVisual 
+                  rotationValue={rotationValue2}
+                  gradientParts={gradientParts}
+                  sliceAngles={sliceAngles}
+                  numSlots={numSlots}
+                  arrowControls={arrowControls2}
+                  size={300}
+                />
+              </div>
+            </div>
+
+            <AnimatePresence>
+              {doubleWheelPopup.finalResult !== null && (
+                <motion.div
+                  initial={{ scale: 0, opacity: 0, y: 50 }}
+                  animate={{ scale: 1, opacity: 1, y: 0 }}
+                  transition={{ type: 'spring', bounce: 0.5 }}
+                  className="absolute z-[110] flex items-center justify-center pointer-events-none mt-16"
+                >
+                  <div className="bg-surface/90 backdrop-blur-sm border-[4px] border-gold-400 rounded-full w-48 h-48 flex items-center justify-center shadow-[0_0_80px_rgba(201,168,76,1)]">
+                    <span className="text-7xl font-display font-bold text-gold-300 drop-shadow-[0_0_20px_rgba(253,230,138,1)]">
+                      {doubleWheelPopup.finalResult}
+                    </span>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

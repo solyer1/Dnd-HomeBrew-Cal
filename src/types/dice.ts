@@ -42,6 +42,8 @@ export interface IndividualRoll {
   isNat20: boolean;
   /** True if rolled 1 on a d20 */
   isNat1: boolean;
+  /** True if this roll was dropped due to advantage/disadvantage */
+  dropped?: boolean;
 }
 
 /** A group of dice to roll together (e.g. "2d6") */

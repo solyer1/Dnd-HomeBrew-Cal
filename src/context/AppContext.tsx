@@ -49,8 +49,8 @@ interface AppContextValue {
   clearHistory: () => void;
 
   // Cross-tab: last dice grand total sent to the calculator
-  pendingDice: { value: number; target: 'base' | 'attack' } | null;
-  sendDiceToCalculator: (value: number, target: 'base' | 'attack') => void;
+  pendingDice: { value: number; target: 'base' | 'attack'; result?: RollResult } | null;
+  sendDiceToCalculator: (value: number, target: 'base' | 'attack', result?: RollResult) => void;
   consumePendingDice: () => void;
 }
 
@@ -77,7 +77,7 @@ export function AppProvider({ children, initialConfig }: AppProviderProps) {
     initialConfig?.damageTypes ?? DEFAULT_DAMAGE_TYPES
   );
   const [rollHistory, setRollHistory] = useState<RollHistoryEntry[]>([]);
-  const [pendingDice, setPendingDice] = useState<{ value: number; target: 'base' | 'attack' } | null>(null);
+  const [pendingDice, setPendingDice] = useState<{ value: number; target: 'base' | 'attack'; result?: RollResult } | null>(null);
 
   // If no server-side config was provided, fall back to client-side fetch
   useEffect(() => {
@@ -109,8 +109,8 @@ export function AppProvider({ children, initialConfig }: AppProviderProps) {
 
   const clearHistory = useCallback(() => setRollHistory([]), []);
 
-  const sendDiceToCalculator = useCallback((value: number, target: 'base' | 'attack') => {
-    setPendingDice({ value, target });
+  const sendDiceToCalculator = useCallback((value: number, target: 'base' | 'attack', result?: RollResult) => {
+    setPendingDice({ value, target, result });
   }, []);
 
   const consumePendingDice = useCallback(() => {

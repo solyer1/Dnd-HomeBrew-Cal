@@ -37,12 +37,14 @@ export function DiceRoller() {
   const [groups, setGroups] = useState<DiceGroup[]>([makeDefaultGroup()]);
   const [lastResult, setLastResult] = useState<RollResult | null>(null);
   const [mode, setMode] = useState<'classic' | 'wheel'>('classic');
+  const [rollMode, setRollMode] = useState<'normal' | 'advantage' | 'disadvantage'>('normal');
 
   const [throwOverlay, setThrowOverlay] = useState<{
     values: number[];
     total: number;
     diceType: string | string[];
     modifiers?: number[];
+    dropped?: boolean[];
     result: RollResult;
     groups: DiceGroup[];
   } | null>(null);
@@ -65,7 +67,7 @@ export function DiceRoller() {
 
   const handleRoll = useCallback(() => {
     if (throwOverlay) return;
-    const result = rollAllGroups(groups, settings.enableDieCap);
+    const result = rollAllGroups(groups, settings.enableDieCap, rollMode);
     const flatValues = result.groups.flatMap(g => g.rolls.map(r => r.value));
     const flatTypes = result.groups.flatMap(g => g.rolls.map(() => g.group.diceType));
     const flatModifiers = result.groups.flatMap(g => {
@@ -75,16 +77,18 @@ export function DiceRoller() {
         return 0; // If sum mode and multiple dice, we don't animate a single die for it
       });
     });
+    const flatDropped = result.groups.flatMap(g => g.rolls.map(r => r.dropped || false));
 
     setThrowOverlay({
       values: flatValues,
       total: result.grandTotal,
       diceType: flatTypes,
       modifiers: flatModifiers,
+      dropped: flatDropped,
       result,
       groups,
     });
-  }, [groups, throwOverlay]);
+  }, [groups, throwOverlay, settings.enableDieCap, rollMode]);
 
   const handleThrowComplete = useCallback(() => {
     if (!throwOverlay) return;
@@ -105,20 +109,29 @@ export function DiceRoller() {
         </div>
       </div>
 
-      {/* Sub Tabs */}
-      <div className="flex flex-wrap sm:flex-nowrap bg-bg rounded-lg p-1 w-full sm:w-max border border-border">
-        <button 
-          onClick={() => setMode('classic')}
-          className={`flex-1 sm:flex-none px-4 py-2 rounded-md font-bold text-sm transition-all ${mode === 'classic' ? 'bg-gold-700 text-bg shadow-sm' : 'text-muted hover:text-white'}`}
-        >
-          Classic Roller
-        </button>
-        <button 
-          onClick={() => setMode('wheel')}
-          className={`flex-1 sm:flex-none px-4 py-2 rounded-md font-bold text-sm transition-all ${mode === 'wheel' ? 'bg-gold-700 text-bg shadow-sm' : 'text-muted hover:text-white'}`}
-        >
-          Spin Wheel
-        </button>
+      {/* Sub Tabs & Global Toggles */}
+      <div className="flex flex-col sm:flex-row gap-4 items-center justify-between w-full">
+        <div className="flex bg-bg rounded-lg p-1 w-full sm:w-max border border-border">
+          <button 
+            onClick={() => setMode('classic')}
+            className={`flex-1 sm:flex-none px-4 py-2 rounded-md font-bold text-sm transition-all ${mode === 'classic' ? 'bg-gold-700 text-bg shadow-sm' : 'text-muted hover:text-white'}`}
+          >
+            Classic Roller
+          </button>
+          <button 
+            onClick={() => setMode('wheel')}
+            className={`flex-1 sm:flex-none px-4 py-2 rounded-md font-bold text-sm transition-all ${mode === 'wheel' ? 'bg-gold-700 text-bg shadow-sm' : 'text-muted hover:text-white'}`}
+          >
+            Spin Wheel
+          </button>
+        </div>
+        
+        {/* Global Roll Mode Toggle */}
+        <div className="flex rounded-lg overflow-hidden border border-border text-xs font-semibold w-max">
+          <button onClick={() => setRollMode('normal')} className={`px-3 py-1.5 transition-all ${rollMode === 'normal' ? 'bg-gold-700 text-bg' : 'bg-surface text-muted hover:text-white'}`}>Normal</button>
+          <button onClick={() => setRollMode('advantage')} className={`px-3 py-1.5 transition-all ${rollMode === 'advantage' ? 'bg-gold-700 text-bg' : 'bg-surface text-muted hover:text-white'}`}>Advantage</button>
+          <button onClick={() => setRollMode('disadvantage')} className={`px-3 py-1.5 transition-all ${rollMode === 'disadvantage' ? 'bg-gold-700 text-bg' : 'bg-surface text-muted hover:text-white'}`}>Disadvantage</button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -156,11 +169,13 @@ export function DiceRoller() {
             ))}
 
             {/* Summary */}
-            <div className="mt-1 pt-3 border-t border-border text-center text-sm text-muted">
-              Rolling:{' '}
-              <span className="text-white font-semibold">
-                {buildLabel(groups)}
-              </span>
+            <div className="mt-1 pt-3 border-t border-border flex flex-col items-center gap-2">
+              <div className="text-sm text-muted">
+                Rolling:{' '}
+                <span className="text-white font-semibold">
+                  {buildLabel(groups)} {rollMode !== 'normal' ? `(with ${rollMode})` : ''}
+                </span>
+              </div>
             </div>
           </div>
 
@@ -181,6 +196,7 @@ export function DiceRoller() {
           <div className="flex flex-col gap-4">
             <SpinWheelRoller 
               onResult={(res) => setLastResult(res)} 
+              rollMode={rollMode}
             />
           </div>
         )}
@@ -212,6 +228,7 @@ export function DiceRoller() {
           total={throwOverlay.total}
           diceType={throwOverlay.diceType}
           modifiers={throwOverlay.modifiers}
+          dropped={throwOverlay.dropped}
           label={rollLabel.trim() || buildLabel(throwOverlay.groups)}
           onComplete={handleThrowComplete}
         />
