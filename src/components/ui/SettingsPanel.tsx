@@ -208,6 +208,35 @@ export function SettingsPanel() {
                   </select>
                 </div>
 
+                {/* Dice Animation Mode (3D / 2D) */}
+                <div>
+                  <label className="text-xs text-muted mb-1 block">{t('settings.diceAnimMode')}</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => updateSettings({ diceAnimationMode: '3d' })}
+                      className={`px-3 py-2 rounded-lg text-xs font-display font-semibold transition-all border ${
+                        (settings.diceAnimationMode || '3d') === '3d'
+                          ? 'bg-gold-500/20 text-gold-300 border-gold-400 shadow-sm'
+                          : 'bg-surface text-muted border-border hover:text-white'
+                      }`}
+                    >
+                      🦅 {t('settings.anim3D')}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => updateSettings({ diceAnimationMode: '2d' })}
+                      className={`px-3 py-2 rounded-lg text-xs font-display font-semibold transition-all border ${
+                        settings.diceAnimationMode === '2d'
+                          ? 'bg-gold-500/20 text-gold-300 border-gold-400 shadow-sm'
+                          : 'bg-surface text-muted border-border hover:text-white'
+                      }`}
+                    >
+                      ⚡ {t('settings.anim2D')}
+                    </button>
+                  </div>
+                </div>
+
                 {/* Die Cap Toggle */}
                 <div className="flex items-center justify-between">
                   <div>

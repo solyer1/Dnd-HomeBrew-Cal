@@ -23,6 +23,8 @@ export interface AppSettings {
   rollSpeed: 'fast' | 'normal' | 'slow';
   /** If true, the final modified roll cannot exceed the die's natural max */
   enableDieCap: boolean;
+  /** Dice rolling animation mode: 3D bird's-eye view or 2D classic overlay */
+  diceAnimationMode?: '3d' | '2d';
 }
 
 // ─── Admin-managed types ─────────────────────────────────────────────────────

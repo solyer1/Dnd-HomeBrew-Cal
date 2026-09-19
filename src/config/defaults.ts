@@ -12,6 +12,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   bgOpacity: 0.85,
   rollSpeed: 'normal',
   enableDieCap: true,
+  diceAnimationMode: '3d',
 };
 
 export const DEFAULT_DAMAGE_INPUT: DamageInput = {
