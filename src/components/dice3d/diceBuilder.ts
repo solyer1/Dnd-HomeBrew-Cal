@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { getDiePolygonData, DICE_DEFINITIONS, type DieDefinition } from './diceData';
 
 let cachedMarbleTexture: THREE.CanvasTexture | null = null;
@@ -157,6 +158,113 @@ export function getPurpleMarbleTexture(): THREE.CanvasTexture | null {
 
 const numeralTextureCache = new Map<string, THREE.CanvasTexture>();
 
+export function drawBlackHoleEmblem(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  grad: CanvasGradient
+) {
+  ctx.save();
+  ctx.translate(cx, cy);
+  // Tilted accretion plane
+  ctx.rotate((-22 * Math.PI) / 180);
+
+  // 1. Deep Singularity Core (Event Horizon Void)
+  ctx.save();
+  ctx.shadowColor = 'rgba(0, 0, 0, 0.98)';
+  ctx.shadowBlur = 18;
+  ctx.beginPath();
+  ctx.arc(0, 0, 36, 0, Math.PI * 2);
+  ctx.fillStyle = '#06010c';
+  ctx.fill();
+  ctx.restore();
+
+  // 2. Inner Photon Sphere Ring (Luminous gilded ring framing the singularity)
+  ctx.save();
+  ctx.shadowColor = 'rgba(255, 230, 160, 0.6)';
+  ctx.shadowBlur = 10;
+  ctx.beginPath();
+  ctx.arc(0, 0, 52, 0, Math.PI * 2);
+  ctx.strokeStyle = grad;
+  ctx.lineWidth = 14;
+  ctx.stroke();
+
+  // Thin outer photon rim
+  ctx.strokeStyle = '#271702';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.arc(0, 0, 59, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(0, 0, 45, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+
+  // Helper to draw smooth relativistic vortex arm
+  const drawVortexArm = () => {
+    ctx.beginPath();
+    // Start at left wing
+    ctx.moveTo(-160, 0);
+    // Outer crown lensing arc to right wing
+    ctx.bezierCurveTo(-110, -50, 10, -100, 80, -90);
+    ctx.bezierCurveTo(130, -80, 160, -40, 172, 0);
+    // Upward flare into relativistic jet horn
+    ctx.bezierCurveTo(176, -40, 140, -100, 80, -135);
+    ctx.bezierCurveTo(30, -160, -20, -160, -35, -155); // Horn needle tip
+    // Inner taper of the jet returning into the crown
+    ctx.bezierCurveTo(0, -140, 60, -115, 85, -80);
+    ctx.bezierCurveTo(90, -50, 65, -30, 45, -45);
+    // Inner contour wrapping around photon ring
+    ctx.bezierCurveTo(20, -65, -40, -60, -80, -40);
+    ctx.bezierCurveTo(-120, -20, -145, -5, -160, 0);
+    ctx.closePath();
+
+    // Dark drop shadow
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.95)';
+    ctx.shadowBlur = 12;
+    ctx.shadowOffsetX = 2;
+    ctx.shadowOffsetY = 4;
+    ctx.fillStyle = grad;
+    ctx.fill();
+
+    // Crisp bronze outline
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = '#271702';
+    ctx.lineWidth = 4;
+    ctx.stroke();
+  };
+
+  // 3. Top Relativistic Jet & Lensing Crown
+  ctx.save();
+  drawVortexArm();
+  ctx.restore();
+
+  // 4. Bottom Relativistic Jet & Underbelly Arc (180 deg point-symmetry)
+  ctx.save();
+  ctx.rotate(Math.PI);
+  drawVortexArm();
+  ctx.restore();
+
+  // 5. Outer Concentric Orbital Lensing Ripples
+  const drawRipple = () => {
+    ctx.beginPath();
+    ctx.arc(0, -5, 145, -Math.PI * 0.78, -Math.PI * 0.28, false);
+    ctx.strokeStyle = grad;
+    ctx.lineWidth = 4.5;
+    ctx.stroke();
+  };
+
+  ctx.save();
+  ctx.shadowColor = 'rgba(255, 230, 160, 0.5)';
+  ctx.shadowBlur = 8;
+  drawRipple();
+  ctx.rotate(Math.PI);
+  drawRipple();
+  ctx.restore();
+
+  ctx.restore();
+}
+
 export function createGildedNumeralTexture(num: number, isTopFace = false, isD100 = false): THREE.CanvasTexture | null {
   if (typeof window === 'undefined') return null;
 
@@ -189,26 +297,7 @@ export function createGildedNumeralTexture(num: number, isTopFace = false, isD10
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
 
-  const yPos = isD100 ? 256 : 265;
-
-  // Layer 1: Deep contrast dark bronze drop shadow and border (guarantees crisp readability on any facet)
-  ctx.shadowColor = 'rgba(0, 0, 0, 0.95)';
-  ctx.shadowBlur = 14;
-  ctx.shadowOffsetX = 3;
-  ctx.shadowOffsetY = 6;
-  ctx.strokeStyle = '#271702';
-  ctx.lineWidth = isD100 ? 10 : 13;
-  ctx.strokeText(text, 256, yPos);
-
-  // Layer 2: Gilded inner bevel outline
-  ctx.shadowBlur = 0;
-  ctx.shadowOffsetX = 0;
-  ctx.shadowOffsetY = 0;
-  ctx.strokeStyle = '#ffe58f';
-  ctx.lineWidth = isD100 ? 4.5 : 6;
-  ctx.strokeText(text, 256, yPos);
-
-  // Layer 3: 24K Chiseled Gold Metallic Gradient Fill
+  // 24K Chiseled Gold Metallic Gradient Fill
   const grad = ctx.createLinearGradient(140, 80, 380, 440);
   grad.addColorStop(0.0, '#ffffff');
   grad.addColorStop(0.20, '#fff4b8');
@@ -216,26 +305,61 @@ export function createGildedNumeralTexture(num: number, isTopFace = false, isD10
   grad.addColorStop(0.80, '#cb9b1e');
   grad.addColorStop(1.0, '#8c5e08');
 
-  ctx.fillStyle = grad;
-  ctx.fillText(text, 256, yPos);
-
-  // If this is the "20" on D20, add stylized gilded crest icon
+  // Face 20 of D20: Render the Iconic Black Hole with Accretion Vortex & Gravitational Lensing
   if (isTopFace && !isD100) {
-    ctx.font = 'bold 46px "Cinzel", Georgia, serif';
-    ctx.fillStyle = grad;
-    ctx.fillText('◆ ⚔ ◆', 256, 110);
-  }
+    drawBlackHoleEmblem(ctx, 256, 215, grad);
 
-  // Underline dot for rotatable ambiguous numbers
-  const ambiguous = [6, 9, 66, 68, 86, 89, 96, 98, 99];
-  if (ambiguous.includes(num)) {
-    ctx.beginPath();
-    ctx.arc(256, isD100 ? 385 : 405, 14, 0, Math.PI * 2);
-    ctx.fillStyle = grad;
-    ctx.fill();
+    // Elegant gilded "20" numeral beneath the Black Hole emblem for instant roll readability
+    ctx.font = 'bold 58px "Cinzel", "Cinzel Decorative", Georgia, serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.95)';
+    ctx.shadowBlur = 12;
+    ctx.shadowOffsetX = 2;
+    ctx.shadowOffsetY = 4;
     ctx.strokeStyle = '#271702';
-    ctx.lineWidth = 4;
-    ctx.stroke();
+    ctx.lineWidth = 6;
+    ctx.strokeText('20', 256, 420);
+
+    ctx.fillStyle = grad;
+    ctx.fillText('20', 256, 420);
+  } else {
+    // Normal Numeral on all other faces
+    const yPos = isD100 ? 256 : 265;
+
+    // Layer 1: Deep contrast dark bronze drop shadow and border (guarantees crisp readability on any facet)
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.95)';
+    ctx.shadowBlur = 14;
+    ctx.shadowOffsetX = 3;
+    ctx.shadowOffsetY = 6;
+    ctx.strokeStyle = '#271702';
+    ctx.lineWidth = isD100 ? 10 : 13;
+    ctx.strokeText(text, 256, yPos);
+
+    // Layer 2: Gilded inner bevel outline
+    ctx.shadowBlur = 0;
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 0;
+    ctx.strokeStyle = '#ffe58f';
+    ctx.lineWidth = isD100 ? 4.5 : 6;
+    ctx.strokeText(text, 256, yPos);
+
+    // Layer 3: 24K Chiseled Gold Metallic Gradient Fill
+    ctx.fillStyle = grad;
+    ctx.fillText(text, 256, yPos);
+
+    // Underline dot for rotatable ambiguous numbers
+    const ambiguous = [6, 9, 66, 68, 86, 89, 96, 98, 99];
+    if (ambiguous.includes(num)) {
+      ctx.beginPath();
+      ctx.arc(256, isD100 ? 385 : 405, 14, 0, Math.PI * 2);
+      ctx.fillStyle = grad;
+      ctx.fill();
+      ctx.strokeStyle = '#271702';
+      ctx.lineWidth = 4;
+      ctx.stroke();
+    }
   }
 
   const texture = new THREE.CanvasTexture(canvas);
@@ -261,7 +385,136 @@ export interface DieFaceMetadata {
   size: number;
 }
 
+export const D20_MODEL_FACE_NORMALS: Record<number, THREE.Vector3> = {
+  1: new THREE.Vector3(0.9362, -0.0240, -0.3508),
+  2: new THREE.Vector3(0.5897, 0.5527, -0.5889),
+  3: new THREE.Vector3(0.0111, 0.3315, -0.9434),
+  4: new THREE.Vector3(-0.5649, 0.5704, -0.5963),
+  5: new THREE.Vector3(-0.9319, 0.0048, -0.3626),
+  6: new THREE.Vector3(0.3423, -0.9392, 0.0273),
+  7: new THREE.Vector3(-0.3713, -0.9282, 0.0228),
+  8: new THREE.Vector3(0.5717, -0.6015, -0.5580),
+  9: new THREE.Vector3(0.0000, -0.3818, -0.9243),
+  10: new THREE.Vector3(-0.5828, -0.5837, -0.5653),
+  11: new THREE.Vector3(0.9319, -0.0048, 0.3626),
+  12: new THREE.Vector3(0.5649, -0.5704, 0.5963),
+  13: new THREE.Vector3(-0.0111, -0.3315, 0.9434),
+  14: new THREE.Vector3(-0.5897, -0.5527, 0.5889),
+  15: new THREE.Vector3(-0.9362, 0.0240, 0.3508),
+  16: new THREE.Vector3(-0.5717, 0.6015, 0.5580),
+  17: new THREE.Vector3(-0.3423, 0.9392, -0.0273),
+  18: new THREE.Vector3(0.3713, 0.9282, -0.0228),
+  19: new THREE.Vector3(0.5828, 0.5837, 0.5653),
+  20: new THREE.Vector3(0.0000, 0.3982, 0.9173),
+};
+
+let cachedD20Group: THREE.Group | null = null;
+let d20LoadingPromise: Promise<THREE.Group> | null = null;
+
+export function loadD20BlackHoleModel(): Promise<THREE.Group> {
+  if (typeof window === 'undefined') {
+    return Promise.resolve(buildDie('D20'));
+  }
+  if (cachedD20Group) {
+    const clone = cachedD20Group.clone(true);
+    clone.userData = { ...cachedD20Group.userData };
+    return Promise.resolve(clone);
+  }
+  if (!d20LoadingPromise) {
+    d20LoadingPromise = new Promise((resolve) => {
+      const loader = new GLTFLoader();
+      loader.load(
+        '/models/d20_black_hole_gold.glb',
+        (gltf) => {
+          const group = new THREE.Group();
+          group.name = 'Die_D20_BlackHole_3D';
+          const scene = gltf.scene;
+          scene.scale.setScalar(1.45);
+
+          scene.traverse((child) => {
+            if ((child as THREE.Mesh).isMesh) {
+              const mesh = child as THREE.Mesh;
+              mesh.castShadow = true;
+              mesh.receiveShadow = true;
+              const mat = mesh.material;
+              if (mat instanceof THREE.MeshStandardMaterial) {
+                if (mat.name === 'Gold_Corner_Trim') {
+                  mat.metalness = 0.95;
+                  mat.roughness = 0.16;
+                  mat.envMapIntensity = 1.35;
+                } else if (mat.name === 'Obsidian_Black') {
+                  mat.roughness = 0.22;
+                  mat.metalness = 0.05;
+                  mat.envMapIntensity = 0.85;
+                } else if (mat.name === 'Singularity_Void') {
+                  mat.roughness = 0.05;
+                  mat.color.set('#030106');
+                } else if (mat.name === 'Lavender_Numerals') {
+                  mat.roughness = 0.25;
+                  mat.emissive.set('#3a2266');
+                  mat.emissiveIntensity = 0.55;
+                }
+              }
+            }
+          });
+
+          group.add(scene);
+
+          const metadata = DICE_DEFINITIONS['D20'] || {
+            name: 'D20 (Black Hole Gold Edition)',
+            type: 'Icosahedron',
+            faces: 20,
+            description: 'Custom 3D Black Hole edition die featuring 24K gold corner trim and lavender numerals.',
+          };
+
+          const faceData = Object.entries(D20_MODEL_FACE_NORMALS).map(([val, norm]) => ({
+            value: Number(val),
+            normal: norm.clone().normalize(),
+            center: norm.clone().normalize().multiplyScalar(2.25),
+            size: 0.95,
+          }));
+
+          group.userData = {
+            dieId: 'D20',
+            metadata,
+            radius: 2.5,
+            isCustomModel: true,
+            faceData,
+          };
+
+          cachedD20Group = group;
+          const clone = group.clone(true);
+          clone.userData = { ...group.userData };
+          resolve(clone);
+        },
+        undefined,
+        (err) => {
+          console.warn('Failed to load custom D20 GLB model, using procedural die:', err);
+          resolve(buildDie('D20'));
+        }
+      );
+    });
+  }
+  return d20LoadingPromise.then((grp) => {
+    const clone = grp.clone(true);
+    clone.userData = { ...grp.userData };
+    return clone;
+  });
+}
+
+// Automatically initiate preload in browser environment
+if (typeof window !== 'undefined') {
+  loadD20BlackHoleModel().catch(() => {});
+}
+
 export function buildDie(dieId: string, customConfig: BuildDieOptions = {}): THREE.Group {
+  // If custom D20 GLB model is cached, instantiate it directly!
+  if (dieId === 'D20' && cachedD20Group) {
+    const clone = cachedD20Group.clone(true);
+    clone.userData = { ...cachedD20Group.userData };
+    return clone;
+  }
+
   const polyData = getDiePolygonData(dieId);
   const metadata: DieDefinition = DICE_DEFINITIONS[dieId] || { name: dieId, type: 'Polyhedron', faces: 20, description: '' };
 

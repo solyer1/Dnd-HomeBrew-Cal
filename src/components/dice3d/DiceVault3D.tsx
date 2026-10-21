@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import * as THREE from 'three';
-import { buildDie, createStudioEnvironment } from './diceBuilder';
+import { buildDie, createStudioEnvironment, loadD20BlackHoleModel } from './diceBuilder';
 import { DICE_DEFINITIONS, normalizeDieId } from './diceData';
 
 const ALL_DICE = [
@@ -144,11 +144,23 @@ export function DiceVault3D({ initialDie = 'D20', onClose }: DiceVault3DProps) {
     dom.addEventListener('wheel', onWheel, { passive: false });
 
     // Load initial die
-    const die = buildDie(selectedDie);
-    const r = (die.userData?.radius as number) || 2.0;
+    let die = buildDie(selectedDie);
+    let r = (die.userData?.radius as number) || 2.0;
     die.position.set(0, r + 0.1, 0);
     scene.add(die);
     dieGroupRef.current = die;
+
+    let isDisposed = false;
+    if (selectedDie === 'D20' && !die.userData?.isCustomModel) {
+      loadD20BlackHoleModel().then((customDie) => {
+        if (isDisposed || !containerRef.current || !dieGroupRef.current) return;
+        scene.remove(die);
+        r = (customDie.userData?.radius as number) || 2.5;
+        customDie.position.set(0, r + 0.1, 0);
+        scene.add(customDie);
+        dieGroupRef.current = customDie;
+      });
+    }
 
     // Animation loop
     let lastTime = performance.now();
@@ -241,6 +253,7 @@ export function DiceVault3D({ initialDie = 'D20', onClose }: DiceVault3DProps) {
     window.addEventListener('resize', handleResize);
 
     return () => {
+      isDisposed = true;
       cancelAnimationFrame(animId);
       window.removeEventListener('resize', handleResize);
       dom.removeEventListener('pointerdown', onPointerDown);
@@ -336,13 +349,17 @@ export function DiceVault3D({ initialDie = 'D20', onClose }: DiceVault3DProps) {
         {/* Die Details Card (Floating Glassmorphism) */}
         <div className="absolute top-4 left-4 max-w-xs p-4 rounded-xl bg-void/70 backdrop-blur-md border border-gold-500/30 text-white pointer-events-none shadow-xl">
           <div className="text-xs font-display tracking-wider text-gold-400 font-bold uppercase mb-0.5">
-            {meta.type}
+            {selectedDie === 'D20' ? 'Artifact • Black Hole Edition' : meta.type}
           </div>
           <h3 className="text-lg font-display font-bold text-white mb-1.5">{meta.name}</h3>
-          <p className="text-xs text-muted/90 leading-relaxed mb-3">{meta.description}</p>
+          <p className="text-xs text-muted/90 leading-relaxed mb-3">
+            {selectedDie === 'D20'
+              ? 'Hand-crafted icosahedron featuring 24K gold corner caps, obsidian satin panels, physical lavender numerals, and the iconic Black Hole accretion vortex on face 20.'
+              : meta.description}
+          </p>
           <div className="flex items-center justify-between text-[11px] text-muted border-t border-white/10 pt-2">
             <span>Faces: <strong className="text-gold-300">{meta.faces}</strong></span>
-            <span>Accents: <strong className="text-gold-300">24k Gilded Brass</strong></span>
+            <span>Accents: <strong className="text-gold-300">{selectedDie === 'D20' ? '24K Gold & Obsidian' : '24k Gilded Brass'}</strong></span>
           </div>
         </div>
 
