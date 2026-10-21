@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import * as THREE from 'three';
-import { buildDie, createStudioEnvironment, loadD20BlackHoleModel } from './diceBuilder';
+import { buildDie, createStudioEnvironment, loadCustomDieModel } from './diceBuilder';
 import { DICE_DEFINITIONS, normalizeDieId } from './diceData';
 
 const ALL_DICE = [
@@ -151,8 +151,8 @@ export function DiceVault3D({ initialDie = 'D20', onClose }: DiceVault3DProps) {
     dieGroupRef.current = die;
 
     let isDisposed = false;
-    if (selectedDie === 'D20' && !die.userData?.isCustomModel) {
-      loadD20BlackHoleModel().then((customDie) => {
+    if (!die.userData?.isCustomModel) {
+      loadCustomDieModel(selectedDie).then((customDie) => {
         if (isDisposed || !containerRef.current || !dieGroupRef.current) return;
         scene.remove(die);
         r = (customDie.userData?.radius as number) || 2.5;
@@ -349,17 +349,16 @@ export function DiceVault3D({ initialDie = 'D20', onClose }: DiceVault3DProps) {
         {/* Die Details Card (Floating Glassmorphism) */}
         <div className="absolute top-4 left-4 max-w-xs p-4 rounded-xl bg-void/70 backdrop-blur-md border border-gold-500/30 text-white pointer-events-none shadow-xl">
           <div className="text-xs font-display tracking-wider text-gold-400 font-bold uppercase mb-0.5">
-            {selectedDie === 'D20' ? 'Artifact • Black Hole Edition' : meta.type}
+            Artifact • Black Hole Gold Edition
           </div>
           <h3 className="text-lg font-display font-bold text-white mb-1.5">{meta.name}</h3>
           <p className="text-xs text-muted/90 leading-relaxed mb-3">
-            {selectedDie === 'D20'
-              ? 'Hand-crafted icosahedron featuring 24K gold corner caps, obsidian satin panels, physical lavender numerals, and the iconic Black Hole accretion vortex on face 20.'
-              : meta.description}
+            Masterwork polyhedral die crafted with 24K gold corner trim, obsidian satin facets, lavender numerals, and the Cosmic Singularity accretion vortex on face {meta.faces}.
           </p>
           <div className="flex items-center justify-between text-[11px] text-muted border-t border-white/10 pt-2">
             <span>Faces: <strong className="text-gold-300">{meta.faces}</strong></span>
-            <span>Accents: <strong className="text-gold-300">{selectedDie === 'D20' ? '24K Gold & Obsidian' : '24k Gilded Brass'}</strong></span>
+            <span>Trim: <strong className="text-gold-300">24K Polished Gold</strong></span>
+            <span>Accents: <strong className="text-gold-300">Obsidian & Lavender</strong></span>
           </div>
         </div>
 
@@ -392,8 +391,8 @@ export function DiceVault3D({ initialDie = 'D20', onClose }: DiceVault3DProps) {
             <span className="text-3xl font-display font-extrabold text-gold-300 drop-shadow-[0_0_12px_rgba(201,168,76,0.6)]">
               {rolledResult}
             </span>
-            {selectedDie === 'D20' && rolledResult === 20 && (
-              <span className="text-xs font-bold text-amber-400 animate-pulse">★ CRITICAL HIT ★</span>
+            {rolledResult === meta.faces && (
+              <span className="text-xs font-bold text-amber-400 animate-pulse">★ SINGULARITY CRITICAL ★</span>
             )}
           </div>
         )}

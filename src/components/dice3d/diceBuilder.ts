@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { getDiePolygonData, DICE_DEFINITIONS, type DieDefinition } from './diceData';
+import DICE_NORMALS_MAP from './diceNormalsMap.json';
 
 let cachedMarbleTexture: THREE.CanvasTexture | null = null;
 
@@ -408,28 +409,54 @@ export const D20_MODEL_FACE_NORMALS: Record<number, THREE.Vector3> = {
   20: new THREE.Vector3(0.0000, 0.3982, 0.9173),
 };
 
-let cachedD20Group: THREE.Group | null = null;
-let d20LoadingPromise: Promise<THREE.Group> | null = null;
+export const cachedDiceGroups: Record<string, THREE.Group> = {};
+const diceLoadingPromises: Record<string, Promise<THREE.Group>> = {};
 
-export function loadD20BlackHoleModel(): Promise<THREE.Group> {
-  if (typeof window === 'undefined') {
-    return Promise.resolve(buildDie('D20'));
+export function getDieFaceNormals(dieId: string): Record<number, THREE.Vector3> {
+  const normId = dieId.toUpperCase();
+  if (normId === 'D20') {
+    return D20_MODEL_FACE_NORMALS;
   }
-  if (cachedD20Group) {
-    const clone = cachedD20Group.clone(true);
-    clone.userData = { ...cachedD20Group.userData };
+  const raw = (DICE_NORMALS_MAP as unknown as Record<string, Record<string, [number, number, number]>>)[normId];
+  if (!raw) return {};
+  const res: Record<number, THREE.Vector3> = {};
+  for (const [key, val] of Object.entries(raw)) {
+    res[Number(key)] = new THREE.Vector3(val[0], val[1], val[2]);
+  }
+  return res;
+}
+
+export function loadCustomDieModel(dieId: string): Promise<THREE.Group> {
+  const normId = dieId.toUpperCase();
+  if (typeof window === 'undefined') {
+    return Promise.resolve(buildDie(normId));
+  }
+  if (cachedDiceGroups[normId]) {
+    const clone = cachedDiceGroups[normId].clone(true);
+    clone.userData = { ...cachedDiceGroups[normId].userData };
     return Promise.resolve(clone);
   }
-  if (!d20LoadingPromise) {
-    d20LoadingPromise = new Promise((resolve) => {
+  if (!diceLoadingPromises[normId]) {
+    diceLoadingPromises[normId] = new Promise((resolve) => {
       const loader = new GLTFLoader();
+      const filename = `${normId.toLowerCase()}_black_hole_gold.glb`;
       loader.load(
-        '/models/d20_black_hole_gold.glb',
+        `/models/${filename}`,
         (gltf) => {
           const group = new THREE.Group();
-          group.name = 'Die_D20_BlackHole_3D';
+          group.name = `Die_${normId}_BlackHole_3D`;
           const scene = gltf.scene;
-          scene.scale.setScalar(1.45);
+
+          // Appropriate visual scale
+          if (normId === 'D20') {
+            scene.scale.setScalar(1.45);
+          } else if (normId === 'D100') {
+            scene.scale.setScalar(1.35);
+          } else if (normId === 'D1' || normId === 'D2') {
+            scene.scale.setScalar(1.5);
+          } else {
+            scene.scale.setScalar(1.55);
+          }
 
           scene.traverse((child) => {
             if ((child as THREE.Mesh).isMesh) {
@@ -460,14 +487,15 @@ export function loadD20BlackHoleModel(): Promise<THREE.Group> {
 
           group.add(scene);
 
-          const metadata = DICE_DEFINITIONS['D20'] || {
-            name: 'D20 (Black Hole Gold Edition)',
-            type: 'Icosahedron',
-            faces: 20,
-            description: 'Custom 3D Black Hole edition die featuring 24K gold corner trim and lavender numerals.',
+          const metadata = DICE_DEFINITIONS[normId] || {
+            name: `${normId} (Black Hole Gold Edition)`,
+            type: 'Polyhedron',
+            faces: parseInt(normId.replace('D', '')) || 20,
+            description: 'Custom 3D Black Hole edition die featuring 24K gold corner trim, obsidian satin facets, and lavender numerals.',
           };
 
-          const faceData = Object.entries(D20_MODEL_FACE_NORMALS).map(([val, norm]) => ({
+          const normalsMap = getDieFaceNormals(normId);
+          const faceData = Object.entries(normalsMap).map(([val, norm]) => ({
             value: Number(val),
             normal: norm.clone().normalize(),
             center: norm.clone().normalize().multiplyScalar(2.25),
@@ -475,43 +503,50 @@ export function loadD20BlackHoleModel(): Promise<THREE.Group> {
           }));
 
           group.userData = {
-            dieId: 'D20',
+            dieId: normId,
             metadata,
-            radius: 2.5,
+            radius: normId === 'D100' ? 2.6 : normId === 'D2' ? 1.8 : 2.5,
             isCustomModel: true,
             faceData,
           };
 
-          cachedD20Group = group;
+          cachedDiceGroups[normId] = group;
           const clone = group.clone(true);
           clone.userData = { ...group.userData };
           resolve(clone);
         },
         undefined,
         (err) => {
-          console.warn('Failed to load custom D20 GLB model, using procedural die:', err);
-          resolve(buildDie('D20'));
+          console.warn(`Failed to load custom ${normId} GLB model, using procedural die:`, err);
+          resolve(buildDie(normId));
         }
       );
     });
   }
-  return d20LoadingPromise.then((grp) => {
+  return diceLoadingPromises[normId].then((grp) => {
     const clone = grp.clone(true);
     clone.userData = { ...grp.userData };
     return clone;
   });
 }
 
-// Automatically initiate preload in browser environment
+export function loadD20BlackHoleModel(): Promise<THREE.Group> {
+  return loadCustomDieModel('D20');
+}
+
+// Automatically initiate preload of primary dice in browser environment
 if (typeof window !== 'undefined') {
-  loadD20BlackHoleModel().catch(() => {});
+  ['D20', 'D6', 'D4', 'D8', 'D10', 'D12', 'D100'].forEach((dieId) => {
+    loadCustomDieModel(dieId).catch(() => {});
+  });
 }
 
 export function buildDie(dieId: string, customConfig: BuildDieOptions = {}): THREE.Group {
-  // If custom D20 GLB model is cached, instantiate it directly!
-  if (dieId === 'D20' && cachedD20Group) {
-    const clone = cachedD20Group.clone(true);
-    clone.userData = { ...cachedD20Group.userData };
+  const normId = dieId.toUpperCase();
+  // If custom GLB model is cached and no custom color overrides are requested, instantiate it directly!
+  if (cachedDiceGroups[normId] && Object.keys(customConfig).length === 0) {
+    const clone = cachedDiceGroups[normId].clone(true);
+    clone.userData = { ...cachedDiceGroups[normId].userData };
     return clone;
   }
 
