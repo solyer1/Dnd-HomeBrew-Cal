@@ -386,7 +386,7 @@ export function DiceVault3D({ initialDie = 'D20', onClose }: DiceVault3DProps) {
           </div>
           <h3 className="text-lg font-display font-bold text-white mb-1.5">{meta.name}</h3>
           <p className="text-xs text-muted/90 leading-relaxed mb-3">
-            Masterwork polyhedral die crafted with 24K gold corner trim, obsidian satin facets, and lavender numerals. Features the <strong>Black Hole Void on Face 1</strong> (Singularity Collapse) and the <strong>Cosmic Supernova Vortex on Face {meta.faces}</strong> (Critical Hit).
+            Masterwork polyhedral die crafted with 24K gold corner trim, obsidian satin facets, and lavender numerals. Features the <strong>Black Hole Void on Face 1</strong> (Singularity Collapse) and the <strong>Cosmic Supernova Vortex on Face {meta.faces}</strong> (Nat Roll).
           </p>
           <div className="flex items-center justify-between text-[11px] text-muted border-t border-white/10 pt-2">
             <span>Faces: <strong className="text-gold-300">{meta.faces}</strong></span>
@@ -428,7 +428,7 @@ export function DiceVault3D({ initialDie = 'D20', onClose }: DiceVault3DProps) {
               <span className="text-xs font-bold text-purple-400 animate-pulse">★ SINGULARITY VOID (NAT 1) ★</span>
             )}
             {rolledResult === meta.faces && meta.faces > 1 && (
-              <span className="text-xs font-bold text-amber-400 animate-pulse">★ COSMIC CRITICAL ★</span>
+              <span className="text-xs font-bold text-amber-400 animate-pulse">★ NAT ROLL ({rolledResult}) ★</span>
             )}
           </div>
         )}
