@@ -406,7 +406,7 @@ export const D20_MODEL_FACE_NORMALS: Record<number, THREE.Vector3> = {
   17: new THREE.Vector3(-0.3423, 0.9392, -0.0273),
   18: new THREE.Vector3(0.3713, 0.9282, -0.0228),
   19: new THREE.Vector3(0.5828, 0.5837, 0.5653),
-  20: new THREE.Vector3(0.0000, 0.3982, 0.9173),
+  20: new THREE.Vector3(0.0000, 0.3818, 0.9243),
 };
 
 export const cachedDiceGroups: Record<string, THREE.Group> = {};
@@ -449,15 +449,26 @@ export function loadCustomDieModel(dieId: string): Promise<THREE.Group> {
           group.name = `Die_${normId}_BlackHole_3D`;
           const scene = gltf.scene;
 
-          // Appropriate visual scale
+          // Appropriate visual scale calibrated to uniform ~2.5 radius
           if (normId === 'D20') {
             scene.scale.setScalar(1.45);
           } else if (normId === 'D100') {
-            scene.scale.setScalar(1.35);
+            scene.scale.setScalar(0.96);
           } else if (normId === 'D1' || normId === 'D2') {
             scene.scale.setScalar(1.5);
+          } else if (normId === 'D4') {
+            scene.scale.setScalar(1.8);
+          } else if (normId === 'D6') {
+            scene.scale.setScalar(1.34);
+          } else if (normId === 'D8') {
+            scene.scale.setScalar(1.0);
+          } else if (['D10', 'D14', 'D16', 'D18'].includes(normId)) {
+            scene.scale.setScalar(0.96);
+          } else if (normId === 'D12') {
+            scene.scale.setScalar(1.12);
           } else {
-            scene.scale.setScalar(1.55);
+            // Prisms (D3, D5, D7, D9, D11, D13, D15, D17, D19)
+            scene.scale.setScalar(0.70);
           }
 
           scene.traverse((child) => {
@@ -475,9 +486,9 @@ export function loadCustomDieModel(dieId: string): Promise<THREE.Group> {
                     mat.envMapIntensity = 1.35;
                   } else if (mat.name.includes('Obsidian') || mat.name === 'Obsidian_Black') {
                     mat.color.set('#0d0a14'); // Rich deep obsidian satin black
-                    mat.roughness = 0.22;
-                    mat.metalness = 0.05;
-                    mat.envMapIntensity = 0.65;
+                    mat.roughness = 0.28;
+                    mat.metalness = 0.02;
+                    mat.envMapIntensity = 0.45;
                   } else if (mat.name.includes('Singularity') || mat.name === 'Singularity_Void') {
                     mat.color.set('#020104'); // True pitch black event horizon void
                     mat.roughness = 0.04;
@@ -515,7 +526,7 @@ export function loadCustomDieModel(dieId: string): Promise<THREE.Group> {
           group.userData = {
             dieId: normId,
             metadata,
-            radius: normId === 'D100' ? 2.6 : normId === 'D2' ? 1.8 : 2.5,
+            radius: normId === 'D2' ? 1.8 : 2.5,
             isCustomModel: true,
             faceData,
           };

@@ -15,6 +15,25 @@ interface DiceVault3DProps {
   onClose?: () => void;
 }
 
+function computeFaceCameraAlignment(normal: THREE.Vector3, toCam: THREE.Vector3, camUp: THREE.Vector3): THREE.Quaternion {
+  const ref = Math.abs(normal.y) > 0.85 ? new THREE.Vector3(0, 0, -1) : new THREE.Vector3(0, 1, 0);
+  const fUp = ref.clone().sub(normal.clone().multiplyScalar(ref.dot(normal))).normalize();
+  const fNormal = normal.clone().normalize();
+  const fRight = new THREE.Vector3().crossVectors(fUp, fNormal).normalize();
+
+  const wNormal = toCam.clone().normalize();
+  const wUp = camUp.clone().projectOnPlane(wNormal).normalize();
+  const wRight = new THREE.Vector3().crossVectors(wUp, wNormal).normalize();
+
+  const mLocal = new THREE.Matrix4().makeBasis(fRight, fUp, fNormal);
+  const mWorld = new THREE.Matrix4().makeBasis(wRight, wUp, wNormal);
+
+  const mLocalInv = mLocal.clone().transpose();
+  const r = mWorld.clone().multiply(mLocalInv);
+
+  return new THREE.Quaternion().setFromRotationMatrix(r);
+}
+
 export function DiceVault3D({ initialDie = 'D20', onClose }: DiceVault3DProps) {
   const [selectedDie, setSelectedDie] = useState(normalizeDieId(initialDie));
   const [autoRotate, setAutoRotate] = useState(true);
@@ -31,6 +50,9 @@ export function DiceVault3D({ initialDie = 'D20', onClose }: DiceVault3DProps) {
     startTime: number;
     initialY: number;
     groundY: number;
+    settledFace: { value: number; normal: THREE.Vector3 } | null;
+    targetQ: THREE.Quaternion | null;
+    isSettling: boolean;
   }>({
     active: false,
     vel: new THREE.Vector3(),
@@ -38,6 +60,9 @@ export function DiceVault3D({ initialDie = 'D20', onClose }: DiceVault3DProps) {
     startTime: 0,
     initialY: 0,
     groundY: 0,
+    settledFace: null,
+    targetQ: null,
+    isSettling: false,
   });
 
   // Setup Three.js scene
@@ -54,7 +79,7 @@ export function DiceVault3D({ initialDie = 'D20', onClose }: DiceVault3DProps) {
     scene.background = new THREE.Color(0x0a0414);
 
     const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 100);
-    camera.position.set(0, 5, 11);
+    camera.position.set(0, 6.5, 9.5);
 
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setSize(width, height);
@@ -99,7 +124,7 @@ export function DiceVault3D({ initialDie = 'D20', onClose }: DiceVault3DProps) {
     fillLight.position.set(-6, 10, -4);
     scene.add(fillLight);
 
-    const rimLight = new THREE.DirectionalLight(0xffd700, 1.35);
+    const rimLight = new THREE.DirectionalLight(0xbfa5ff, 0.75);
     rimLight.position.set(0, 10, -8);
     scene.add(rimLight);
 
@@ -108,7 +133,7 @@ export function DiceVault3D({ initialDie = 'D20', onClose }: DiceVault3DProps) {
     let prevMouseX = 0;
     let prevMouseY = 0;
     let yaw = 0;
-    let pitch = 0.45;
+    let pitch = 0.65;
     let dist = 11;
 
     const onPointerDown = (e: PointerEvent) => {
@@ -183,57 +208,52 @@ export function DiceVault3D({ initialDie = 'D20', onClose }: DiceVault3DProps) {
       const rollState = rollingStateRef.current;
       if (rollState.active && dieGroupRef.current) {
         const curDie = dieGroupRef.current;
-        rollState.vel.y -= 28.0 * dt;
-        curDie.position.addScaledVector(rollState.vel, dt);
+        const elapsed = (now - rollState.startTime) / 1000;
 
-        const deltaAng = rollState.angVel.length() * dt;
-        if (deltaAng > 0.001) {
-          const axis = rollState.angVel.clone().normalize();
-          const q = new THREE.Quaternion().setFromAxisAngle(axis, deltaAng);
-          curDie.quaternion.premultiply(q);
-        }
+        if (!rollState.isSettling) {
+          rollState.vel.y -= 28.0 * dt;
+          curDie.position.addScaledVector(rollState.vel, dt);
 
-        if (curDie.position.y <= rollState.groundY) {
-          curDie.position.y = rollState.groundY;
-          if (rollState.vel.y < 0) {
-            rollState.vel.y = -rollState.vel.y * 0.45;
+          const deltaAng = rollState.angVel.length() * dt;
+          if (deltaAng > 0.001) {
+            const axis = rollState.angVel.clone().normalize();
+            const q = new THREE.Quaternion().setFromAxisAngle(axis, deltaAng);
+            curDie.quaternion.premultiply(q);
           }
-          const decay = Math.pow(0.96, dt * 60);
-          rollState.vel.x *= decay;
-          rollState.vel.z *= decay;
-          rollState.angVel.multiplyScalar(decay);
 
-          const elapsed = (now - rollState.startTime) / 1000;
-          if ((rollState.vel.length() < 0.35 && rollState.angVel.length() < 0.8) || elapsed > 1.8) {
-            // Smoothly align to nearest top face
-            const faces = (curDie.userData?.faceData || []) as Array<{
-              value: number;
-              normal: THREE.Vector3;
-            }>;
-            let maxDot = -Infinity;
-            let topFace = faces[0];
-            const up = new THREE.Vector3(0, 1, 0);
-            faces.forEach((f) => {
-              const wn = f.normal.clone().applyQuaternion(curDie.quaternion).normalize();
-              const dot = wn.dot(up);
-              if (dot > maxDot) {
-                maxDot = dot;
-                topFace = f;
-              }
-            });
-
-            if (topFace) {
-              const wn = topFace.normal.clone().applyQuaternion(curDie.quaternion).normalize();
-              const qAlign = new THREE.Quaternion().setFromUnitVectors(wn, up);
-              const targetQ = qAlign.clone().multiply(curDie.quaternion);
-              curDie.quaternion.slerp(targetQ, Math.min(1.0, dt * 7.0));
+          if (curDie.position.y <= rollState.groundY) {
+            curDie.position.y = rollState.groundY;
+            if (rollState.vel.y < 0) {
+              rollState.vel.y = -rollState.vel.y * 0.42;
             }
+            const decay = Math.pow(0.95, dt * 60);
+            rollState.vel.x *= decay;
+            rollState.vel.z *= decay;
+            rollState.angVel.multiplyScalar(decay);
 
-            if (rollState.angVel.length() < 0.05 || elapsed > 2.6) {
-              rollState.active = false;
-              setIsRolling(false);
-              setRolledResult(topFace ? topFace.value : 1);
+            if ((rollState.vel.length() < 0.45 && rollState.angVel.length() < 1.2) || elapsed > 1.25) {
+              rollState.isSettling = true;
+              const toCam = camera.position.clone().sub(curDie.position).normalize();
+              const fNormal = rollState.settledFace ? rollState.settledFace.normal : new THREE.Vector3(0, 1, 0);
+              rollState.targetQ = computeFaceCameraAlignment(fNormal, toCam, new THREE.Vector3(0, 1, 0));
+              rollState.vel.set(0, 0, 0);
+              rollState.angVel.set(0, 0, 0);
             }
+          }
+        } else {
+          // Smooth settling phase: orient winning face directly and upright towards camera
+          curDie.position.y = rollState.groundY;
+          if (rollState.targetQ) {
+            curDie.quaternion.slerp(rollState.targetQ, Math.min(1.0, dt * 10.0));
+          }
+
+          if (elapsed > 1.95 || (rollState.targetQ && curDie.quaternion.angleTo(rollState.targetQ) < 0.008)) {
+            if (rollState.targetQ) {
+              curDie.quaternion.copy(rollState.targetQ);
+            }
+            rollState.active = false;
+            setIsRolling(false);
+            setRolledResult(rollState.settledFace ? rollState.settledFace.value : 1);
           }
         }
       }
@@ -285,23 +305,36 @@ export function DiceVault3D({ initialDie = 'D20', onClose }: DiceVault3DProps) {
     if (isRolling || !dieGroupRef.current) return;
     setIsRolling(true);
     setRolledResult(null);
+    setAutoRotate(false); // Stop camera spin so settled number stays in view
 
     const die = dieGroupRef.current;
     const r = (die.userData?.radius as number) || 2.0;
     const groundY = r + 0.05;
+
+    // Pick fair random face from available faces
+    const faces = (die.userData?.faceData || []) as Array<{
+      value: number;
+      normal: THREE.Vector3;
+    }>;
+    const targetFace = faces.length > 0
+      ? faces[Math.floor(Math.random() * faces.length)]
+      : { value: 1, normal: new THREE.Vector3(0, 1, 0) };
 
     die.position.set(0, groundY + 3.8, 0);
     rollingStateRef.current = {
       active: true,
       vel: new THREE.Vector3((Math.random() - 0.5) * 1.5, 1.2, (Math.random() - 0.5) * 1.5),
       angVel: new THREE.Vector3(
-        (Math.random() - 0.5) * 8.0,
-        (Math.random() - 0.5) * 6.0,
-        (Math.random() - 0.5) * 8.0
+        (Math.random() - 0.5) * 12.0,
+        (Math.random() - 0.5) * 10.0,
+        (Math.random() - 0.5) * 12.0
       ),
       startTime: performance.now(),
       initialY: groundY + 3.8,
       groundY,
+      settledFace: targetFace,
+      targetQ: null,
+      isSettling: false,
     };
   };
 
