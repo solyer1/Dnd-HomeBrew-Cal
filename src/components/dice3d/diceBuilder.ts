@@ -465,25 +465,33 @@ export function loadCustomDieModel(dieId: string): Promise<THREE.Group> {
               const mesh = child as THREE.Mesh;
               mesh.castShadow = true;
               mesh.receiveShadow = true;
-              const mat = mesh.material;
-              if (mat instanceof THREE.MeshStandardMaterial) {
-                if (mat.name === 'Gold_Corner_Trim') {
-                  mat.metalness = 0.95;
-                  mat.roughness = 0.16;
-                  mat.envMapIntensity = 1.35;
-                } else if (mat.name === 'Obsidian_Black') {
-                  mat.roughness = 0.22;
-                  mat.metalness = 0.05;
-                  mat.envMapIntensity = 0.85;
-                } else if (mat.name === 'Singularity_Void') {
-                  mat.roughness = 0.05;
-                  mat.color.set('#030106');
-                } else if (mat.name === 'Lavender_Numerals') {
-                  mat.roughness = 0.25;
-                  mat.emissive.set('#3a2266');
-                  mat.emissiveIntensity = 0.55;
+              const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+              materials.forEach((mat) => {
+                if (mat instanceof THREE.MeshStandardMaterial || mat instanceof THREE.MeshPhysicalMaterial) {
+                  if (mat.name.includes('Gold') || mat.name === 'Gold_Corner_Trim') {
+                    mat.color.set('#ffd75a');
+                    mat.metalness = 0.96;
+                    mat.roughness = 0.16;
+                    mat.envMapIntensity = 1.35;
+                  } else if (mat.name.includes('Obsidian') || mat.name === 'Obsidian_Black') {
+                    mat.color.set('#0d0a14'); // Rich deep obsidian satin black
+                    mat.roughness = 0.22;
+                    mat.metalness = 0.05;
+                    mat.envMapIntensity = 0.65;
+                  } else if (mat.name.includes('Singularity') || mat.name === 'Singularity_Void') {
+                    mat.color.set('#020104'); // True pitch black event horizon void
+                    mat.roughness = 0.04;
+                    mat.metalness = 0.0;
+                    mat.envMapIntensity = 0.05;
+                  } else if (mat.name.includes('Lavender') || mat.name === 'Lavender_Numerals') {
+                    mat.color.set('#c8b0f8'); // Radiant amethyst lavender numerals
+                    mat.roughness = 0.25;
+                    mat.metalness = 0.18;
+                    mat.emissive.set('#4a2278');
+                    mat.emissiveIntensity = 0.6;
+                  }
                 }
-              }
+              });
             }
           });
 
@@ -571,17 +579,17 @@ export function buildDie(dieId: string, customConfig: BuildDieOptions = {}): THR
     side: THREE.DoubleSide,
   });
 
-  // Radiant Royal Amethyst Jewel Resin with crystal glass clearcoat
+  // Obsidian Black Satin Facets with subtle purple resin underglow
   const marbleTex = getPurpleMarbleTexture();
   const purpleMaterial = new THREE.MeshPhysicalMaterial({
-    color: new THREE.Color(customConfig.purpleColor || '#5b138f'),
-    emissive: new THREE.Color(customConfig.purpleEmissive || '#270742'),
+    color: new THREE.Color(customConfig.purpleColor || '#0d0a14'),
+    emissive: new THREE.Color(customConfig.purpleEmissive || '#18092a'),
     map: marbleTex,
-    roughness: 0.12,
-    metalness: 0.02,
-    clearcoat: 1.0,
-    clearcoatRoughness: 0.04,
-    specularColor: new THREE.Color('#f3e8ff'),
+    roughness: 0.18,
+    metalness: 0.04,
+    clearcoat: 0.85,
+    clearcoatRoughness: 0.08,
+    specularColor: new THREE.Color('#d8b4fe'),
     ior: 1.54,
     side: THREE.DoubleSide,
   });
