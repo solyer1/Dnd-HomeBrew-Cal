@@ -414,16 +414,18 @@ const diceLoadingPromises: Record<string, Promise<THREE.Group>> = {};
 
 export function getDieFaceNormals(dieId: string): Record<number, THREE.Vector3> {
   const normId = dieId.toUpperCase();
+  const raw = (DICE_NORMALS_MAP as unknown as Record<string, Record<string, [number, number, number]>>)[normId];
+  if (raw && Object.keys(raw).length > 0) {
+    const res: Record<number, THREE.Vector3> = {};
+    for (const [key, val] of Object.entries(raw)) {
+      res[Number(key)] = new THREE.Vector3(val[0], val[1], val[2]);
+    }
+    return res;
+  }
   if (normId === 'D20') {
     return D20_MODEL_FACE_NORMALS;
   }
-  const raw = (DICE_NORMALS_MAP as unknown as Record<string, Record<string, [number, number, number]>>)[normId];
-  if (!raw) return {};
-  const res: Record<number, THREE.Vector3> = {};
-  for (const [key, val] of Object.entries(raw)) {
-    res[Number(key)] = new THREE.Vector3(val[0], val[1], val[2]);
-  }
-  return res;
+  return {};
 }
 
 export function loadCustomDieModel(dieId: string): Promise<THREE.Group> {

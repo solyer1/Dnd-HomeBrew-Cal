@@ -353,12 +353,12 @@ export function DiceVault3D({ initialDie = 'D20', onClose }: DiceVault3DProps) {
           </div>
           <h3 className="text-lg font-display font-bold text-white mb-1.5">{meta.name}</h3>
           <p className="text-xs text-muted/90 leading-relaxed mb-3">
-            Masterwork polyhedral die crafted with 24K gold corner trim, obsidian satin facets, lavender numerals, and the Cosmic Singularity accretion vortex on face {meta.faces}.
+            Masterwork polyhedral die crafted with 24K gold corner trim, obsidian satin facets, and lavender numerals. Features the <strong>Black Hole Void on Face 1</strong> (Singularity Collapse) and the <strong>Cosmic Supernova Vortex on Face {meta.faces}</strong> (Critical Hit).
           </p>
           <div className="flex items-center justify-between text-[11px] text-muted border-t border-white/10 pt-2">
             <span>Faces: <strong className="text-gold-300">{meta.faces}</strong></span>
             <span>Trim: <strong className="text-gold-300">24K Polished Gold</strong></span>
-            <span>Accents: <strong className="text-gold-300">Obsidian & Lavender</strong></span>
+            <span>Accents: <strong className="text-purple-300">Obsidian & Lavender</strong></span>
           </div>
         </div>
 
@@ -391,8 +391,11 @@ export function DiceVault3D({ initialDie = 'D20', onClose }: DiceVault3DProps) {
             <span className="text-3xl font-display font-extrabold text-gold-300 drop-shadow-[0_0_12px_rgba(201,168,76,0.6)]">
               {rolledResult}
             </span>
-            {rolledResult === meta.faces && (
-              <span className="text-xs font-bold text-amber-400 animate-pulse">★ SINGULARITY CRITICAL ★</span>
+            {rolledResult === 1 && (
+              <span className="text-xs font-bold text-purple-400 animate-pulse">★ SINGULARITY VOID (NAT 1) ★</span>
+            )}
+            {rolledResult === meta.faces && meta.faces > 1 && (
+              <span className="text-xs font-bold text-amber-400 animate-pulse">★ COSMIC CRITICAL ★</span>
             )}
           </div>
         )}
