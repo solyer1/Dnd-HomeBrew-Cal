@@ -118,6 +118,10 @@ export function DiceVault3D({ initialDie = 'D20', onClose }: DiceVault3DProps) {
     const keyLight = new THREE.DirectionalLight(0xfffaed, 2.4);
     keyLight.position.set(6, 14, 8);
     keyLight.castShadow = true;
+    keyLight.shadow.mapSize.width = 2048;
+    keyLight.shadow.mapSize.height = 2048;
+    keyLight.shadow.bias = -0.0005;
+    keyLight.shadow.normalBias = 0.02;
     scene.add(keyLight);
 
     const fillLight = new THREE.DirectionalLight(0xc4adff, 0.75);

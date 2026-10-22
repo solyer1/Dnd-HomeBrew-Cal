@@ -441,7 +441,7 @@ export function loadCustomDieModel(dieId: string): Promise<THREE.Group> {
   if (!diceLoadingPromises[normId]) {
     diceLoadingPromises[normId] = new Promise((resolve) => {
       const loader = new GLTFLoader();
-      const filename = `${normId.toLowerCase()}_black_hole_gold.glb`;
+      const filename = `${normId.toLowerCase()}_black_hole_gold.glb?v=5`;
       loader.load(
         `/models/${filename}`,
         (gltf) => {
@@ -475,15 +475,15 @@ export function loadCustomDieModel(dieId: string): Promise<THREE.Group> {
             if ((child as THREE.Mesh).isMesh) {
               const mesh = child as THREE.Mesh;
               mesh.castShadow = true;
-              mesh.receiveShadow = true;
+              mesh.receiveShadow = false;
               const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
               materials.forEach((mat) => {
                 if (mat instanceof THREE.MeshStandardMaterial || mat instanceof THREE.MeshPhysicalMaterial) {
                   if (mat.name.includes('Gold') || mat.name === 'Gold_Corner_Trim') {
                     mat.color.set('#ffd75a');
-                    mat.metalness = 0.96;
-                    mat.roughness = 0.16;
-                    mat.envMapIntensity = 1.35;
+                    mat.metalness = 0.88;
+                    mat.roughness = 0.20;
+                    mat.envMapIntensity = 1.45;
                   } else if (mat.name.includes('Obsidian') || mat.name === 'Obsidian_Black') {
                     mat.color.set('#0d0a14'); // Rich deep obsidian satin black
                     mat.roughness = 0.28;
