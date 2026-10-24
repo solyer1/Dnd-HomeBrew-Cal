@@ -87,3 +87,12 @@ export interface RollHistoryEntry {
   result: RollResult;
   timestamp: number;
 }
+
+// ─── Presets ──────────────────────────────────────────────────────────────────
+
+/** Modifier preset slot in the Stats Modifiers panel */
+export interface ModifierPreset {
+  id: string;
+  value: number | null; // null represents an empty slot "..."
+  label?: string;       // optional label e.g. "STR", "DEX"
+}

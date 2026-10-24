@@ -377,7 +377,7 @@ function MiniDiceRoller({ onApply }: { onApply: (value: number, target: RollTarg
 }
 
 // ─── Main Calculator ──────────────────────────────────────────────────────────
-export function DamageCalculator() {
+export function DamageCalculator({ isActive = true }: { isActive?: boolean }) {
   const { critTable, pendingDice, consumePendingDice, settings, statusTypes, damageTypes } = useAppContext();
   const { t } = useTranslation();
 
@@ -393,6 +393,50 @@ export function DamageCalculator() {
   const [attackModifier, setAttackModifier] = useState(0);
   const [hasRolledAttack, setHasRolledAttack] = useState(false);
   const [manualRollMode, setManualRollMode] = useState<'auto' | 'normal' | 'advantage' | 'disadvantage'>('auto');
+
+  // Load saved damage input from localStorage on mount
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('dnd_damage_input');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed === 'object') {
+          setInput(prev => ({ ...prev, ...parsed }));
+        }
+      }
+      const savedConfig = localStorage.getItem('dnd_damage_calc_extra');
+      if (savedConfig) {
+        const parsed = JSON.parse(savedConfig);
+        if (parsed.baseQty) setBaseQty(parsed.baseQty);
+        if (parsed.baseType) setBaseType(parsed.baseType);
+        if (parsed.baseModifier !== undefined) setBaseModifier(parsed.baseModifier);
+        if (parsed.baseModifierMode) setBaseModifierMode(parsed.baseModifierMode);
+        if (parsed.attackModifier !== undefined) setAttackModifier(parsed.attackModifier);
+      }
+    } catch {}
+  }, []);
+
+  // Save damage input to localStorage on change
+  useEffect(() => {
+    try {
+      localStorage.setItem('dnd_damage_input', JSON.stringify(input));
+    } catch {}
+  }, [input]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        'dnd_damage_calc_extra',
+        JSON.stringify({
+          baseQty,
+          baseType,
+          baseModifier,
+          baseModifierMode,
+          attackModifier,
+        })
+      );
+    } catch {}
+  }, [baseQty, baseType, baseModifier, baseModifierMode, attackModifier]);
 
   // Dice throw overlay state
   const [throwOverlay, setThrowOverlay] = useState<{
@@ -496,33 +540,45 @@ export function DamageCalculator() {
       const { value, target, result } = pendingDice;
       if (target === 'attack') setHasRolledAttack(true);
       
-      let finalValues = [value];
-      let finalTypes = [target === 'attack' ? 'd20' : 'Total'];
-      let finalDropped = [false];
-      let finalModifiers = [0]; // Just basic
+      const targetField = target === 'attack' ? 'attackRoll' : 'baseDamage';
+      const targetVal = target === 'attack' ? Math.min(20, Math.max(1, value)) : value;
 
-      if (result && result.groups.length > 0) {
-        // If we received a full result, we can reconstruct the exact animation!
-        const g = result.groups[0];
-        finalValues = g.rolls.map(r => r.value);
-        finalTypes = g.rolls.map(() => g.group.diceType);
-        finalDropped = g.rolls.map(r => r.dropped || false);
-        finalModifiers = g.rolls.map(() => g.group.modifierMode === 'per-die' ? g.group.modifier : (g.group.quantity === 1 ? g.group.modifier : 0));
+      if (!isActive) {
+        // Tab is hidden in background, directly update without throwing animation
+        setInput(prev => ({
+          ...prev,
+          [targetField]: targetVal,
+        }));
+        consumePendingDice();
+      } else {
+        let finalValues = [value];
+        let finalTypes = [target === 'attack' ? 'd20' : 'Total'];
+        let finalDropped = [false];
+        let finalModifiers = [0]; // Just basic
+
+        if (result && result.groups.length > 0) {
+          // If we received a full result, we can reconstruct the exact animation!
+          const g = result.groups[0];
+          finalValues = g.rolls.map(r => r.value);
+          finalTypes = g.rolls.map(() => g.group.diceType);
+          finalDropped = g.rolls.map(r => r.dropped || false);
+          finalModifiers = g.rolls.map(() => g.group.modifierMode === 'per-die' ? g.group.modifier : (g.group.quantity === 1 ? g.group.modifier : 0));
+        }
+
+        setThrowOverlay({
+          target: targetField,
+          values: finalValues,
+          total: value,
+          diceType: finalTypes,
+          isNat20: target === 'attack' && value >= 20,
+          isNat1: target === 'attack' && value <= 1,
+          dropped: finalDropped,
+          modifiers: finalModifiers,
+        });
+        consumePendingDice();
       }
-
-      setThrowOverlay({
-        target: target === 'attack' ? 'attackRoll' : 'baseDamage',
-        values: finalValues,
-        total: value,
-        diceType: finalTypes,
-        isNat20: target === 'attack' && value >= 20,
-        isNat1: target === 'attack' && value <= 1,
-        dropped: finalDropped,
-        modifiers: finalModifiers,
-      });
-      consumePendingDice();
     }
-  }, [pendingDice, consumePendingDice]);
+  }, [pendingDice, consumePendingDice, isActive]);
 
   const effectiveAttackRoll = settings.enableDieCap 
     ? Math.min(20, Math.max(1, input.attackRoll + attackModifier))

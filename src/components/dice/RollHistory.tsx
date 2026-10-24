@@ -82,28 +82,57 @@ function HistoryEntry({ entry }: { entry: RollHistoryEntry }) {
 
 export function RollHistory({ history, onClear }: Props) {
   const { t } = useTranslation();
+  const [isCollapsed, setIsCollapsed] = useState(false);
+
   if (history.length === 0) {
     return (
-      <div className="card text-center py-6 text-muted text-sm">
-        <div className="text-2xl mb-2 opacity-30">📜</div>
+      <div className="card text-center py-4 text-muted text-sm">
+        <div className="text-xl mb-1 opacity-30">📜</div>
         No roll history yet
       </div>
     );
   }
 
   return (
-    <div className="card flex flex-col gap-2">
-      <div className="flex items-center justify-between mb-1">
-        <h3 className="font-display text-sm font-bold text-gold-400">
-          📜 Roll History ({history.length})
-        </h3>
-        <button onClick={onClear} className="btn-ghost text-xs text-red-500 hover:text-red-400">{t('dice.clearHistory')}</button>
+    <div className="card flex flex-col gap-2 transition-all duration-200">
+      <div className="flex items-center justify-between mb-0.5">
+        <button
+          type="button"
+          onClick={() => setIsCollapsed((p) => !p)}
+          className="flex items-center gap-2 font-display text-sm font-bold text-gold-400 hover:text-gold-200 transition-colors text-left"
+          title={isCollapsed ? 'Click to expand history' : 'Click to collapse history'}
+        >
+          <span>📜 Roll History ({history.length})</span>
+          <span className="text-[11px] px-1.5 py-0.2 rounded bg-surface2 border border-border text-muted font-normal">
+            {isCollapsed ? '▼ Show' : '▲ Hide'}
+          </span>
+        </button>
+
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setIsCollapsed((p) => !p)}
+            className="text-[11px] text-muted hover:text-white px-2 py-0.5 rounded border border-border bg-surface2/50"
+          >
+            {isCollapsed ? 'Expand' : 'Collapse'}
+          </button>
+          <button
+            type="button"
+            onClick={onClear}
+            className="btn-ghost text-xs text-red-500 hover:text-red-400 py-0.5 px-2"
+          >
+            {t('dice.clearHistory')}
+          </button>
+        </div>
       </div>
-      <div className="flex flex-col gap-2 max-h-80 overflow-y-auto pr-1 scrollbar-thin">
-        {history.map((entry) => (
-          <HistoryEntry key={entry.id} entry={entry} />
-        ))}
-      </div>
+
+      {!isCollapsed && (
+        <div className="flex flex-col gap-2 max-h-44 overflow-y-auto pr-1 scrollbar-thin animate-fade-in">
+          {history.map((entry) => (
+            <HistoryEntry key={entry.id} entry={entry} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

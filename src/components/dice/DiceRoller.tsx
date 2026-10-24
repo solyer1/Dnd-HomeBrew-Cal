@@ -7,8 +7,8 @@ import { useTranslation } from '@/hooks/useTranslation';
  * 3D Vault inspector, and "Send to Calculator" targeting Base Damage or Attack Roll.
  */
 
-import React, { useState, useCallback } from 'react';
-import type { DiceGroup, DiceType, RollResult } from '@/types/dice';
+import React, { useState, useCallback, useEffect } from 'react';
+import type { DiceGroup, DiceType, RollResult, ModifierPreset } from '@/types/dice';
 import { rollAllGroups } from '@/engine/diceEngine';
 import { useAppContext } from '@/context/AppContext';
 import { generateId } from '@/utils/math';
@@ -18,6 +18,8 @@ import { RollHistory } from './RollHistory';
 import { DiceThrowOverlay } from '../calculator/DiceThrowOverlay';
 import { SpinWheelRoller } from './SpinWheelRoller';
 import { DiceVault3D } from '../dice3d/DiceVault3D';
+import { StatsModifiers } from './StatsModifiers';
+import { AbilityScoresBoard } from './AbilityScoresBoard';
 
 const DICE_TYPES: DiceType[] = [
   'd1', 'd2', 'd3', 'd4', 'd5', 'd6', 'd7', 'd8', 'd9', 'd10',
@@ -33,11 +35,93 @@ const makeDefaultGroup = (): DiceGroup => ({
   label: '',
 });
 
-export function DiceRoller() {
+const DEFAULT_PRESETS: ModifierPreset[] = [
+  { id: 'preset-1', value: 1, label: '' },
+  { id: 'preset-2', value: null, label: '' },
+  { id: 'preset-3', value: null, label: '' },
+];
+
+export function DiceRoller({ isActive = true }: { isActive?: boolean }) {
   const { addToHistory, rollHistory, clearHistory, settings, updateSettings } = useAppContext();
   const { t } = useTranslation();
 
   const [groups, setGroups] = useState<DiceGroup[]>([makeDefaultGroup()]);
+  const [presets, setPresets] = useState<ModifierPreset[]>(DEFAULT_PRESETS);
+  const [activeSlotId, setActiveSlotId] = useState<string | null>(null);
+  const [boardPosition, setBoardPosition] = useState<'left' | 'right'>('right');
+
+  // Restore presets and board position from localStorage on mount
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('dnd_stats_modifier_presets');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setPresets(parsed);
+        }
+      }
+      const savedPos = localStorage.getItem('dnd_ability_board_pos');
+      if (savedPos === 'left' || savedPos === 'right') {
+        setBoardPosition(savedPos);
+      }
+    } catch {}
+  }, []);
+
+  const handleToggleBoardPosition = useCallback(() => {
+    setBoardPosition((prev) => {
+      const next = prev === 'left' ? 'right' : 'left';
+      try {
+        localStorage.setItem('dnd_ability_board_pos', next);
+      } catch {}
+      return next;
+    });
+  }, []);
+
+  const handleUpdatePresets = useCallback((newPresets: ModifierPreset[]) => {
+    setPresets(newPresets);
+    try {
+      localStorage.setItem('dnd_stats_modifier_presets', JSON.stringify(newPresets));
+    } catch {}
+  }, []);
+
+  const handleApplyModifier = useCallback((mod: number) => {
+    setGroups(prev =>
+      prev.map((g, idx) => (idx === 0 ? { ...g, modifier: mod } : g))
+    );
+  }, []);
+
+  const handleSelectModifierFromBoard = useCallback((mod: number) => {
+    handleApplyModifier(mod);
+    if (activeSlotId) {
+      setPresets(prev => {
+        const next = prev.map(p => (p.id === activeSlotId ? { ...p, value: mod } : p));
+        try {
+          localStorage.setItem('dnd_stats_modifier_presets', JSON.stringify(next));
+        } catch {}
+        return next;
+      });
+      setActiveSlotId(null);
+    }
+  }, [activeSlotId, handleApplyModifier]);
+
+  const handleAddModifierToPreset = useCallback((mod: number) => {
+    setPresets(prev => {
+      const emptyIndex = prev.findIndex(p => p.value === null);
+      let next: ModifierPreset[];
+      if (emptyIndex !== -1) {
+        next = prev.map((p, i) => (i === emptyIndex ? { ...p, value: mod } : p));
+      } else if (prev.length < 8) {
+        next = [...prev, { id: generateId(), value: mod, label: '' }];
+      } else {
+        next = prev.map((p, i) => (i === prev.length - 1 ? { ...p, value: mod } : p));
+      }
+      try {
+        localStorage.setItem('dnd_stats_modifier_presets', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  }, []);
+
   const [lastResult, setLastResult] = useState<RollResult | null>(null);
   const [mode, setMode] = useState<'classic' | 'wheel' | 'vault3d'>('classic');
   const [rollMode, setRollMode] = useState<'normal' | 'advantage' | 'disadvantage'>('normal');
@@ -239,8 +323,29 @@ export function DiceRoller() {
                     ? 'border-gold-700 bg-gold-900/30 text-gold-600 cursor-not-allowed'
                     : 'border-gold-500 bg-gold-900/30 text-gold-300 hover:bg-gold-800/40 hover:text-gold-200 hover:shadow-gold active:scale-95'}`}
               >
-                🎲 Roll Dice
+                🎲 Roll {buildLabel(groups)}
               </button>
+
+              {/* Stats Modifiers Preset Panel */}
+              <StatsModifiers
+                currentModifier={groups[0]?.modifier ?? 0}
+                onApplyModifier={handleApplyModifier}
+                presets={presets}
+                onUpdatePresets={handleUpdatePresets}
+                activeSlotId={activeSlotId}
+                onSetActiveSlotId={setActiveSlotId}
+              />
+
+              {/* Ability Scores and Modifiers Board (when docked to left) */}
+              {boardPosition === 'left' && (
+                <AbilityScoresBoard
+                  currentModifier={groups[0]?.modifier ?? 0}
+                  onSelectModifier={handleSelectModifierFromBoard}
+                  onAddToPreset={handleAddModifierToPreset}
+                  position={boardPosition}
+                  onTogglePosition={handleToggleBoardPosition}
+                />
+              )}
             </div>
           ) : (
             <div className="flex flex-col gap-4">
@@ -267,6 +372,17 @@ export function DiceRoller() {
 
             {/* History */}
             <RollHistory history={rollHistory} onClear={clearHistory} />
+
+            {/* Ability Scores and Modifiers Board (when docked to right) */}
+            {boardPosition === 'right' && (
+              <AbilityScoresBoard
+                currentModifier={groups[0]?.modifier ?? 0}
+                onSelectModifier={handleSelectModifierFromBoard}
+                onAddToPreset={handleAddModifierToPreset}
+                position={boardPosition}
+                onTogglePosition={handleToggleBoardPosition}
+              />
+            )}
           </div>
         </div>
       )}

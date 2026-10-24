@@ -129,9 +129,15 @@ export default function Home() {
 
         {/* ── Content ───────────────────────────────────── */}
         <main className="flex-1 max-w-7xl mx-auto w-full px-4 py-6">
-          {tab === 'calculator' && <DamageCalculator />}
-          {tab === 'dice' && <DiceRoller />}
-          {tab === 'coins' && <CoinFlipper />}
+          <div className={tab === 'calculator' ? 'block' : 'hidden'} role="tabpanel" aria-labelledby="tab-calculator">
+            <DamageCalculator isActive={tab === 'calculator'} />
+          </div>
+          <div className={tab === 'dice' ? 'block' : 'hidden'} role="tabpanel" aria-labelledby="tab-dice">
+            <DiceRoller isActive={tab === 'dice'} />
+          </div>
+          <div className={tab === 'coins' ? 'block' : 'hidden'} role="tabpanel" aria-labelledby="tab-coins">
+            <CoinFlipper />
+          </div>
         </main>
 
         {/* ── Footer ────────────────────────────────────── */}
