@@ -187,8 +187,9 @@ export function SkillPercentTab({ isActive = true }: { isActive?: boolean }) {
     let currentDeg = 0;
     let currentPct = 0;
     const safeTotal = totalPercentage || 100;
+    const result = [];
 
-    return outcomes.map((o) => {
+    for (const o of outcomes) {
       const pct = (Number(o.percentage) || 0) / safeTotal;
       const deg = pct * 360;
       const startDeg = currentDeg;
@@ -199,15 +200,17 @@ export function SkillPercentTab({ isActive = true }: { isActive?: boolean }) {
       currentDeg = endDeg;
       currentPct += pct;
 
-      return {
+      result.push({
         ...o,
         deg,
         startDeg,
         endDeg,
         rangeStart,
         rangeEnd: Math.min(100, rangeEnd),
-      };
-    });
+      });
+    }
+
+    return result;
   }, [outcomes, totalPercentage]);
 
   // Gradient string for conic-gradient
