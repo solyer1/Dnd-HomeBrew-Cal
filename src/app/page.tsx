@@ -6,15 +6,16 @@
  * Dynamic background controlled by settings.
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { DamageCalculator } from '@/components/calculator/DamageCalculator';
 import { DiceRoller } from '@/components/dice/DiceRoller';
 import { CoinFlipper } from '@/components/coins/CoinFlipper';
+import { SkillPercentTab } from '@/components/skill/SkillPercentTab';
 import { SettingsPanel } from '@/components/ui/SettingsPanel';
 import { useAppContext } from '@/context/AppContext';
 import { useTranslation } from '@/hooks/useTranslation';
 
-type Tab = 'calculator' | 'dice' | 'coins';
+type Tab = 'calculator' | 'dice' | 'coins' | 'skillPercent';
 
 function Background() {
   const { settings } = useAppContext();
@@ -54,15 +55,72 @@ function Background() {
 }
 
 export default function Home() {
+  const [mounted, setMounted] = useState(false);
   const [tab, setTab] = useState<Tab>('calculator');
   const { t } = useTranslation();
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   function handleTabSwitch(newTab: Tab) {
     setTab(newTab);
   }
 
+  // Pre-mount SSR shell: renders clean layout with <div> tab placeholders (no buttons or inputs)
+  // to prevent browser extensions & autofill from injecting fdprocessedid before React hydration
+  if (!mounted) {
+    return (
+      <div className="relative min-h-screen" suppressHydrationWarning>
+        <Background />
+        <div className="relative z-10 min-h-screen flex flex-col">
+          <header className="sticky top-0 z-30 border-b border-border bg-bg/80 backdrop-blur-xl">
+            <div className="max-w-7xl mx-auto px-4 py-3 flex flex-col md:flex-row items-center justify-between gap-4">
+              <div className="flex items-center gap-3 self-start md:self-auto">
+                <span className="text-2xl">⚔️</span>
+                <div>
+                  <h1 className="font-display font-bold text-lg text-gold-400 leading-none">
+                    D&D Combat Calculator
+                  </h1>
+                  <p className="text-xs text-muted">v0.1 — Damage & Dice</p>
+                </div>
+              </div>
+
+              {/* Tab bar placeholder using divs */}
+              <div className="w-full md:w-auto overflow-x-auto pb-1 -mb-1 scrollbar-hide">
+                <div className="flex w-max rounded-lg overflow-hidden border border-border">
+                  <div className="px-4 py-2 text-sm font-semibold bg-gold-900/60 text-gold-300 border-r border-gold-700 select-none">
+                    ⚔️ Damage
+                  </div>
+                  <div className="px-4 py-2 text-sm font-semibold bg-surface text-muted border-r border-border select-none">
+                    🎲 Dice
+                  </div>
+                  <div className="px-4 py-2 text-sm font-semibold bg-surface text-muted border-r border-border select-none">
+                    🎯 Skill %
+                  </div>
+                  <div className="px-4 py-2 text-sm font-semibold bg-surface text-muted select-none">
+                    Coin Toss
+                  </div>
+                </div>
+              </div>
+            </div>
+          </header>
+
+          <main className="flex-1 max-w-7xl mx-auto w-full px-4 py-6">
+            <div className="flex items-center justify-center min-h-[360px]">
+              <div className="flex flex-col items-center gap-3 text-gold-500/60">
+                <span className="text-3xl animate-bounce">⚔️</span>
+                <span className="font-display text-sm tracking-widest uppercase">Loading...</span>
+              </div>
+            </div>
+          </main>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="relative min-h-screen">
+    <div className="relative min-h-screen" suppressHydrationWarning>
       <Background />
 
       {/* Settings panel */}
@@ -111,6 +169,18 @@ export default function Home() {
                   {t('tabs.dice')}
                 </button>
                 <button
+                  id="tab-skill-percent"
+                  role="tab"
+                  aria-selected={tab === 'skillPercent'}
+                  onClick={() => handleTabSwitch('skillPercent')}
+                  className={`px-4 py-2 text-sm font-semibold transition-all duration-200
+                    ${tab === 'skillPercent'
+                      ? 'bg-gold-900/60 text-gold-300 border-r border-gold-700'
+                      : 'bg-surface text-muted hover:text-white border-r border-border'}`}
+                >
+                  {t('tabs.skillPercent') || '🎯 Skill %'}
+                </button>
+                <button
                   id="tab-coins"
                   role="tab"
                   aria-selected={tab === 'coins'}
@@ -134,6 +204,9 @@ export default function Home() {
           </div>
           <div className={tab === 'dice' ? 'block' : 'hidden'} role="tabpanel" aria-labelledby="tab-dice">
             <DiceRoller isActive={tab === 'dice'} />
+          </div>
+          <div className={tab === 'skillPercent' ? 'block' : 'hidden'} role="tabpanel" aria-labelledby="tab-skill-percent">
+            <SkillPercentTab isActive={tab === 'skillPercent'} />
           </div>
           <div className={tab === 'coins' ? 'block' : 'hidden'} role="tabpanel" aria-labelledby="tab-coins">
             <CoinFlipper />

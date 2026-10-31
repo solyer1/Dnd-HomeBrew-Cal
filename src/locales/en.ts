@@ -2,6 +2,7 @@ export const en = {
   tabs: {
     damage: '⚔️ Damage',
     dice: '🎲 Dice',
+    skillPercent: '🎯 Skill %',
   },
   settings: {
     title: '⚙️ Settings',

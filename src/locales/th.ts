@@ -4,6 +4,7 @@ export const th: Dictionary = {
   tabs: {
     damage: '⚔️ คำนวณดาเมจ',
     dice: '🎲 ทอยเต๋า',
+    skillPercent: '🎯 สกิล %',
   },
   settings: {
     title: '⚙️ ตั้งค่า',
