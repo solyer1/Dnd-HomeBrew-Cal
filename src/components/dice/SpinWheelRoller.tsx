@@ -118,13 +118,17 @@ const DEFAULT_PRESETS: WheelUserPreset[] = [
  * Coordinates match conic-gradient: 0 deg at top (12 o'clock), increasing clockwise.
  */
 function getWedgePath(startDeg: number, endDeg: number, cx = 190, cy = 190, r = 190): string {
+  const diff = endDeg - startDeg;
+  // Full circle (1 face, 100% chance): two 180-degree arcs to prevent degenerate 0-area SVG arc
+  if (diff >= 359.99) {
+    return `M ${cx} ${cy - r} A ${r} ${r} 0 1 1 ${cx} ${cy + r} A ${r} ${r} 0 1 1 ${cx} ${cy - r} Z`;
+  }
   const rad1 = (startDeg * Math.PI) / 180;
   const rad2 = (endDeg * Math.PI) / 180;
   const x1 = cx + r * Math.sin(rad1);
   const y1 = cy - r * Math.cos(rad1);
   const x2 = cx + r * Math.sin(rad2);
   const y2 = cy - r * Math.cos(rad2);
-  const diff = endDeg - startDeg;
   const largeArcFlag = diff > 180 ? 1 : 0;
   return `M ${cx} ${cy} L ${x1.toFixed(2)} ${y1.toFixed(2)} A ${r} ${r} 0 ${largeArcFlag} 1 ${x2.toFixed(2)} ${y2.toFixed(2)} Z`;
 }
@@ -132,9 +136,9 @@ function getWedgePath(startDeg: number, endDeg: number, cx = 190, cy = 190, r = 
 /**
  * Loads and reads an image/GIF.
  * If GIF: reads directly without canvas to preserve all animation frames!
- * If PNG/JPG: resizes to max 192px using canvas to keep localStorage light.
+ * If PNG/JPG: resizes to max 380px using canvas to keep localStorage light while filling full wheel.
  */
-function resizeImageToDataUrl(file: File, maxSize = 192): Promise<string> {
+function resizeImageToDataUrl(file: File, maxSize = 380): Promise<string> {
   return new Promise((resolve, reject) => {
     // Preserve animated GIF without flattening to canvas
     if (file.type === 'image/gif') {
@@ -251,6 +255,9 @@ function WheelVisual({
   rotationValue, gradientParts, sliceAngles, numSlots, arrowControls, slotConfigs = {}, size = 380, idPrefix = 'w' 
 }: WheelVisualProps) {
   const scale = size / 380;
+  // Sanitize idPrefix so it contains only valid CSS/SVG identifier characters (strips colons from React useId)
+  const cleanIdPrefix = (idPrefix || 'wheel').replace(/[^a-zA-Z0-9_-]/g, '_');
+
   return (
     <div className="relative flex items-center justify-center" style={{ width: size, height: size }}>
       <div 
@@ -294,7 +301,7 @@ function WheelVisual({
                 const cfg = slotConfigs[slice.slot] || {};
                 if (cfg.iconType !== 'image' || !cfg.iconValue || cfg.imageFit !== 'cover') return null;
                 return (
-                  <clipPath key={`clip-${slice.slot}`} id={`${idPrefix}-clip-wedge-${slice.slot}`}>
+                  <clipPath key={`clip-${slice.slot}`} id={`${cleanIdPrefix}-clip-wedge-${slice.slot}`}>
                     <path d={getWedgePath(slice.start, slice.end)} />
                   </clipPath>
                 );
@@ -304,21 +311,43 @@ function WheelVisual({
             {sliceAngles.map((slice) => {
               const cfg = slotConfigs[slice.slot] || {};
               if (cfg.iconType !== 'image' || !cfg.iconValue || cfg.imageFit !== 'cover') return null;
+              const diff = slice.end - slice.start;
+              const midAngle = slice.start + diff / 2;
+              const rimWidth = 2 * 190 * Math.sin(((diff / 2) * Math.PI) / 180);
+              const imgSize = diff >= 359.9 ? 380 : Math.max(240, rimWidth + 40);
+              const imgX = diff >= 359.9 ? 0 : 190 - imgSize / 2;
+              const imgY = diff >= 359.9 ? 0 : 95 - imgSize / 2;
+
               return (
-                <g key={`cover-${slice.slot}`} clipPath={`url(#${idPrefix}-clip-wedge-${slice.slot})`}>
-                  <image
-                    href={cfg.iconValue}
-                    x="0"
-                    y="0"
-                    width="380"
-                    height="380"
-                    preserveAspectRatio="xMidYMid slice"
-                  />
+                <g key={`cover-${slice.slot}`} clipPath={`url(#${cleanIdPrefix}-clip-wedge-${slice.slot})`}>
+                  {diff >= 359.9 ? (
+                    <image
+                      href={cfg.iconValue}
+                      xlinkHref={cfg.iconValue}
+                      x="0"
+                      y="0"
+                      width="380"
+                      height="380"
+                      preserveAspectRatio="xMidYMid slice"
+                    />
+                  ) : (
+                    <g transform={`rotate(${midAngle} 190 190)`}>
+                      <image
+                        href={cfg.iconValue}
+                        xlinkHref={cfg.iconValue}
+                        x={imgX}
+                        y={imgY}
+                        width={imgSize}
+                        height={imgSize}
+                        preserveAspectRatio="xMidYMid slice"
+                      />
+                    </g>
+                  )}
                   {/* Subtle dark shade over the image so numerals pop */}
                   <path
                     d={getWedgePath(slice.start, slice.end)}
                     fill="#000"
-                    fillOpacity="0.25"
+                    fillOpacity="0.2"
                   />
                 </g>
               );
@@ -561,10 +590,12 @@ export function SpinWheelRoller({ onResult, rollMode = 'normal' }: SpinWheelRoll
     if (!file || slot === null) return;
 
     try {
-      const dataUrl = await resizeImageToDataUrl(file, 192);
+      const dataUrl = await resizeImageToDataUrl(file, 380);
+      const prevCfg = slotConfigs[slot] || {};
       updateSlotConfig(slot, {
         iconType: 'image',
         iconValue: dataUrl,
+        imageFit: prevCfg.imageFit || 'cover',
       });
     } catch {
       alert('Unable to load image. Please select a valid PNG, JPG, GIF, or WEBP file.');
