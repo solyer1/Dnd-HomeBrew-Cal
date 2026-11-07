@@ -3,11 +3,13 @@
 /**
  * SkillPercentTab
  * Dedicated tab for Percentage / Multi-Outcome Skills (e.g. 25% / 25% / 50%).
- * Supports:
- * - Visual Spin Wheel (conic gradient proportional to %)
- * - Fast d100 percentile roll with rich laser sweep & number scramble animation
- * - Direct outcome editing with automatic localStorage persistence
+ * Fully customizable:
+ * - Custom color per piece (native color picker + hex + palette swatches)
+ * - Custom Image or Emoji per piece (file upload with auto-resize, image URL, or 40+ RPG emoji picker)
+ * - Visual Spin Wheel with radial image/emoji rendering
+ * - Fast d100 percentile roll with laser sweep & probability lock
  * - Auto-balance to 100% helper & Reset to Default
+ * - Automatic localStorage persistence
  * - Integration with Damage Calculator
  */
 
@@ -18,24 +20,108 @@ import { useAppContext } from '@/context/AppContext';
 import { generateId } from '@/utils/math';
 import type { SkillOutcome, SkillRollHistoryEntry } from '@/types/skillPercent';
 
-const PALETTE = [
+const PRESET_COLORS = [
   '#ef4444', // Red / Fire
-  '#3b82f6', // Blue / Ice
-  '#eab308', // Gold / Holy / Physical
-  '#10b981', // Emerald / Acid / Nature
-  '#8b5cf6', // Purple / Arcane / Void
-  '#f97316', // Orange / Lightning / Flare
+  '#f97316', // Orange / Flare
+  '#f59e0b', // Amber / Sun
+  '#eab308', // Gold / Holy
+  '#84cc16', // Lime / Acid
+  '#10b981', // Emerald / Nature
+  '#14b8a6', // Teal / Water
   '#06b6d4', // Cyan / Frost
+  '#3b82f6', // Blue / Ice
+  '#6366f1', // Indigo / Lightning
+  '#8b5cf6', // Purple / Arcane
+  '#d946ef', // Fuchsia / Magic
   '#ec4899', // Pink / Psychic
-  '#64748b', // Slate / Blunt / Normal
+  '#f43f5e', // Rose / Blood
+  '#64748b', // Slate / Physical
   '#1e293b', // Dark Void
 ];
 
-const DEFAULT_OUTCOMES: SkillOutcome[] = [
-  { id: 'tri-1', label: '🔥 Fire Blast (Burn)', percentage: 25, color: '#ef4444', notes: '+1d6 Fire DoT' },
-  { id: 'tri-2', label: '❄️ Frost Chill (Slow)', percentage: 25, color: '#3b82f6', notes: 'Movement halved' },
-  { id: 'tri-3', label: '⚔️ Physical Strike (Normal)', percentage: 50, color: '#eab308', notes: 'Standard weapon damage' },
+const COMMON_EMOJIS = [
+  '⚔️', '🗡️', '🏹', '🛡️', '🔥', '❄️', '⚡', '💥', '💀', '🩸',
+  '🧪', '💰', '💎', '👑', '🐉', '🐺', '🦅', '👁️', '🔮', '✨',
+  '🌪️', '🌙', '☀️', '🎯', '🎲', '🧟', '🧙', '👹', '🪵', '🪨',
+  '🍃', '🍖', '🍺', '📜', '⭐', '❤️', '🖤', '🍀', '🕯️', '🪄',
 ];
+
+const DEFAULT_OUTCOMES: SkillOutcome[] = [
+  {
+    id: 'tri-1',
+    label: 'Fire Blast (Burn)',
+    percentage: 25,
+    color: '#ef4444',
+    iconType: 'emoji',
+    iconValue: '🔥',
+    notes: '+1d6 Fire DoT',
+  },
+  {
+    id: 'tri-2',
+    label: 'Frost Chill (Slow)',
+    percentage: 25,
+    color: '#3b82f6',
+    iconType: 'emoji',
+    iconValue: '❄️',
+    notes: 'Movement halved',
+  },
+  {
+    id: 'tri-3',
+    label: 'Physical Strike (Normal)',
+    percentage: 50,
+    color: '#eab308',
+    iconType: 'emoji',
+    iconValue: '⚔️',
+    notes: 'Standard weapon damage',
+  },
+];
+
+/**
+ * Resizes an uploaded image file down to max 128x128 pixels using an offscreen canvas.
+ * Keeps localStorage footprint minimal (~5-15 KB per image).
+ */
+function resizeImageToDataUrl(file: File, maxSize = 128): Promise<string> {
+  return new Promise((resolve, reject) => {
+    if (!file.type.startsWith('image/')) {
+      reject(new Error('File is not an image'));
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const result = e.target?.result as string;
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+        if (width > height) {
+          if (width > maxSize) {
+            height = Math.round((height * maxSize) / width);
+            width = maxSize;
+          }
+        } else {
+          if (height > maxSize) {
+            width = Math.round((width * maxSize) / height);
+            height = maxSize;
+          }
+        }
+        canvas.width = Math.max(1, width);
+        canvas.height = Math.max(1, height);
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          resolve(result);
+          return;
+        }
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/png', 0.85));
+      };
+      img.onerror = () => resolve(result);
+      img.src = result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
 
 const playTickSound = (ctx: AudioContext) => {
   try {
@@ -84,8 +170,12 @@ export function SkillPercentTab({ isActive = true }: { isActive?: boolean }) {
   const { sendDiceToCalculator } = useAppContext();
 
   // Active skill editing
-  const [skillName, setSkillName] = useState<string>('Tri-Element Strike (25% / 25% / 50%)');
+  const [skillName, setSkillName] = useState<string>('Custom Party Roulette (25% / 25% / 50%)');
   const [outcomes, setOutcomes] = useState<SkillOutcome[]>(DEFAULT_OUTCOMES);
+
+  // Track which slice is currently expanded for media/color customizer
+  const [editingSliceId, setEditingSliceId] = useState<string | null>(null);
+  const [iconTab, setIconTab] = useState<'emoji' | 'image' | 'none'>('emoji');
 
   // Display mode: 'wheel' or 'd100bar'
   const [viewMode, setViewMode] = useState<'wheel' | 'd100bar'>('wheel');
@@ -111,6 +201,8 @@ export function SkillPercentTab({ isActive = true }: { isActive?: boolean }) {
   const arrowControls = useAnimation();
   const audioCtxRef = useRef<AudioContext | null>(null);
   const d100IntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const targetUploadSliceIdRef = useRef<string | null>(null);
 
   // Restore outcomes & name from localStorage on mount
   useEffect(() => {
@@ -119,7 +211,29 @@ export function SkillPercentTab({ isActive = true }: { isActive?: boolean }) {
       if (savedOutcomes) {
         const parsed = JSON.parse(savedOutcomes);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          setOutcomes(parsed);
+          // Gracefully sanitize saved items
+          const sanitized = parsed.map((item: Partial<SkillOutcome> & { label?: string; percentage?: number; color?: string }) => {
+            let iconType = item.iconType || 'none';
+            let iconValue = item.iconValue || '';
+            if (!iconValue && item.label) {
+              const emojiMatch = item.label.match(/^(\p{Extended_Pictographic}+|\p{Emoji}+)/u);
+              if (emojiMatch) {
+                iconType = 'emoji';
+                iconValue = emojiMatch[0];
+              }
+            }
+            return {
+              id: item.id || generateId(),
+              label: item.label || 'Outcome',
+              percentage: typeof item.percentage === 'number' ? item.percentage : 10,
+              color: item.color || '#ef4444',
+              iconType,
+              iconValue,
+              bonusDamage: item.bonusDamage,
+              notes: item.notes,
+            };
+          });
+          setOutcomes(sanitized);
         }
       }
       const savedName = localStorage.getItem('dnd_skill_percent_name');
@@ -142,44 +256,39 @@ export function SkillPercentTab({ isActive = true }: { isActive?: boolean }) {
     } catch {}
   }, [skillName]);
 
-  // Cleanup timers on unmount
+  // Clean up interval on unmount
   useEffect(() => {
     return () => {
       if (d100IntervalRef.current) clearInterval(d100IntervalRef.current);
     };
   }, []);
 
-  // Reset to default 25/25/50
-  const handleResetToDefault = () => {
-    if (window.confirm('Reset table back to default 25% / 25% / 50%?')) {
-      setSkillName('Tri-Element Strike (25% / 25% / 50%)');
-      setOutcomes(DEFAULT_OUTCOMES);
-      setLastRoll(null);
-    }
-  };
-
-  // Percentage metrics
+  // Total percentage check
   const totalPercentage = useMemo(() => {
-    return outcomes.reduce((sum, o) => sum + (Number(o.percentage) || 0), 0);
+    return outcomes.reduce((acc, curr) => acc + (Number(curr.percentage) || 0), 0);
   }, [outcomes]);
 
-  const isHundred = Math.abs(totalPercentage - 100) < 0.01;
+  const isHundred = totalPercentage === 100;
 
-  // Auto-balance to 100%
+  // Auto-balance outcomes to 100%
   const handleAutoBalance = () => {
     if (outcomes.length === 0) return;
-    const currentSum = outcomes.reduce((sum, o) => sum + (Number(o.percentage) || 0), 0) || 1;
-    let accumulated = 0;
-    const balanced = outcomes.map((o, idx) => {
-      if (idx === outcomes.length - 1) {
-        const remaining = Math.max(0, 100 - accumulated);
-        return { ...o, percentage: remaining };
-      }
-      const proportional = Math.round(((Number(o.percentage) || 0) / currentSum) * 100);
-      accumulated += proportional;
-      return { ...o, percentage: proportional };
-    });
-    setOutcomes(balanced);
+    const baseShare = Math.floor(100 / outcomes.length);
+    const remainder = 100 - baseShare * outcomes.length;
+    setOutcomes(
+      outcomes.map((o, idx) => ({
+        ...o,
+        percentage: idx === 0 ? baseShare + remainder : baseShare,
+      }))
+    );
+  };
+
+  // Reset to default
+  const handleResetToDefault = () => {
+    if (confirm('Reset to default 3 outcomes (25% / 25% / 50%)?')) {
+      setOutcomes(DEFAULT_OUTCOMES);
+      setSkillName('Custom Party Roulette (25% / 25% / 50%)');
+    }
   };
 
   // Slice angles for conic-gradient
@@ -370,15 +479,19 @@ export function SkillPercentTab({ isActive = true }: { isActive?: boolean }) {
   };
 
   const handleAddOutcome = () => {
-    if (outcomes.length >= 8) return;
-    const nextColor = PALETTE[outcomes.length % PALETTE.length];
+    if (outcomes.length >= 16) return;
+    const nextColor = PRESET_COLORS[outcomes.length % PRESET_COLORS.length];
+    const nextEmoji = COMMON_EMOJIS[outcomes.length % COMMON_EMOJIS.length];
+    const letter = String.fromCharCode(65 + outcomes.length);
     setOutcomes((prev) => [
       ...prev,
       {
         id: generateId(),
-        label: `Outcome ${String.fromCharCode(65 + prev.length)}`,
+        label: `Outcome ${letter}`,
         percentage: 10,
         color: nextColor,
+        iconType: 'emoji',
+        iconValue: nextEmoji,
       },
     ]);
   };
@@ -386,20 +499,56 @@ export function SkillPercentTab({ isActive = true }: { isActive?: boolean }) {
   const handleRemoveOutcome = (id: string) => {
     if (outcomes.length <= 1) return;
     setOutcomes((prev) => prev.filter((o) => o.id !== id));
+    if (editingSliceId === id) setEditingSliceId(null);
+  };
+
+  // Trigger file upload for a specific slice
+  const handleTriggerImageUpload = (sliceId: string) => {
+    targetUploadSliceIdRef.current = sliceId;
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+      fileInputRef.current.click();
+    }
+  };
+
+  // Handle uploaded image file
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    const sliceId = targetUploadSliceIdRef.current;
+    if (!file || !sliceId) return;
+
+    try {
+      const dataUrl = await resizeImageToDataUrl(file, 128);
+      handleUpdateOutcome(sliceId, {
+        iconType: 'image',
+        iconValue: dataUrl,
+      });
+    } catch {
+      alert('Unable to load image. Please select a valid PNG, JPG, or WEBP image.');
+    }
   };
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-6" style={{ display: isActive ? 'flex' : 'none' }}>
+      {/* Hidden File Input for Image Upload */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        onChange={handleFileChange}
+        className="hidden"
+      />
+
       {/* ── Top Header ── */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <span className="text-3xl">🎯</span>
           <div>
             <h2 className="font-display text-xl font-bold text-gold-400">
-              Skill % & Outcome Roulette
+              Custom Spinner Wheel & Skill %
             </h2>
             <p className="text-xs text-muted">
-              Multi-outcome probability calculator (e.g. 25% / 25% / 50%) with interactive wheel & d100 roll
+              Fully customizable party roulette: assign custom colors, images, or emojis to each piece!
             </p>
           </div>
         </div>
@@ -431,47 +580,77 @@ export function SkillPercentTab({ isActive = true }: { isActive?: boolean }) {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* ── Left Column: Wheel & Result Display (7 cols) ── */}
         <div className="lg:col-span-7 flex flex-col items-center gap-4">
-          <div className="card w-full p-6 flex flex-col items-center justify-center relative min-h-[460px] overflow-hidden">
+          <div className="card w-full p-6 flex flex-col items-center justify-center relative min-h-[480px] overflow-hidden">
             {viewMode === 'wheel' ? (
               /* Wheel Visual */
-              <div className="relative flex items-center justify-center my-4" style={{ width: 340, height: 340 }}>
+              <div className="relative flex items-center justify-center my-4" style={{ width: 360, height: 360 }}>
                 {/* Pointer Arrow at top */}
                 <motion.div
                   animate={arrowControls}
                   style={{ transformOrigin: 'top center' }}
-                  className="absolute -top-3 left-1/2 -translate-x-1/2 z-30 drop-shadow-[0_4px_8px_rgba(0,0,0,0.8)]"
+                  className="absolute -top-3.5 left-1/2 -translate-x-1/2 z-30 drop-shadow-[0_4px_8px_rgba(0,0,0,0.85)]"
                 >
-                  <div className="w-0 h-0 border-l-[14px] border-l-transparent border-r-[14px] border-r-transparent border-t-[22px] border-t-gold-400 relative">
-                    <div className="absolute -top-[22px] -left-[10px] w-0 h-0 border-l-[10px] border-l-transparent border-r-[10px] border-r-transparent border-t-[16px] border-t-gold-900" />
+                  <div className="w-0 h-0 border-l-[15px] border-l-transparent border-r-[15px] border-r-transparent border-t-[24px] border-t-gold-400 relative">
+                    <div className="absolute -top-[24px] -left-[11px] w-0 h-0 border-l-[11px] border-l-transparent border-r-[11px] border-r-transparent border-t-[18px] border-t-gold-950" />
                   </div>
                 </motion.div>
 
                 {/* Rotating Conic Gradient Wheel */}
                 <motion.div
-                  className="relative rounded-full border-[6px] border-gold-600 shadow-[0_0_30px_rgba(201,168,76,0.35)] overflow-hidden"
+                  className="relative rounded-full border-[6px] border-gold-600 shadow-[0_0_35px_rgba(201,168,76,0.4)] overflow-hidden"
                   style={{
-                    width: '320px',
-                    height: '320px',
+                    width: '340px',
+                    height: '340px',
                     background: `conic-gradient(${gradientParts.join(', ')})`,
                     rotate: rotationValue,
                   }}
                 >
                   {/* Subtle rim highlight */}
-                  <div className="absolute inset-1 rounded-full border border-white/20 pointer-events-none" />
+                  <div className="absolute inset-1 rounded-full border border-white/25 pointer-events-none" />
 
-                  {/* Slice labels placed radially */}
+                  {/* Slice labels and icons placed radially */}
                   {slicesWithAngles.map((slice) => {
-                    if (slice.deg < 12) return null;
+                    if (slice.deg < 8) return null;
                     const labelAngle = slice.startDeg + slice.deg / 2;
+                    const isNarrow = slice.deg < 22;
+                    const isUltraNarrow = slice.deg < 14;
+
+                    const hasImage = slice.iconType === 'image' && slice.iconValue;
+                    const hasEmoji = (slice.iconType === 'emoji' || !slice.iconType) && slice.iconValue;
+
                     return (
                       <div
                         key={slice.id}
                         className="absolute top-0 left-0 w-full h-full pointer-events-none"
                         style={{ transform: `rotate(${labelAngle}deg)` }}
                       >
-                        <div className="absolute top-4 left-1/2 -translate-x-1/2 flex flex-col items-center font-display font-black text-white text-xs drop-shadow-[0_2px_4px_rgba(0,0,0,0.95)] max-w-[80px] text-center leading-tight">
-                          <span>{slice.percentage}%</span>
-                          <span className="truncate text-[10px] opacity-90">{slice.label.split(' ')[0]}</span>
+                        <div className="absolute top-3 left-1/2 -translate-x-1/2 flex flex-col items-center font-display font-black text-white text-xs drop-shadow-[0_2px_4px_rgba(0,0,0,0.95)] max-w-[95px] text-center leading-tight">
+                          {/* Image or Emoji */}
+                          {hasImage ? (
+                            <img
+                              src={slice.iconValue}
+                              alt=""
+                              className={`${
+                                isNarrow ? 'w-5 h-5' : 'w-7 h-7'
+                              } rounded-full object-cover border-2 border-white/90 shadow-md mb-0.5 pointer-events-none`}
+                            />
+                          ) : hasEmoji ? (
+                            <span className={`${isNarrow ? 'text-sm' : 'text-xl'} mb-0.5 select-none drop-shadow`}>
+                              {slice.iconValue}
+                            </span>
+                          ) : null}
+
+                          {/* Percentage */}
+                          <span className={`${isNarrow ? 'text-[11px]' : 'text-xs'} font-black text-amber-200 tracking-tight`}>
+                            {slice.percentage}%
+                          </span>
+
+                          {/* Short Label */}
+                          {!isUltraNarrow && (
+                            <span className="truncate text-[10px] opacity-95 max-w-[75px] font-sans font-bold">
+                              {slice.label}
+                            </span>
+                          )}
                         </div>
                       </div>
                     );
@@ -480,7 +659,7 @@ export function SkillPercentTab({ isActive = true }: { isActive?: boolean }) {
 
                 {/* Golden Center Hub */}
                 <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-14 h-14 bg-surface border-[4px] border-gold-500 rounded-full z-20 shadow-2xl flex items-center justify-center">
-                  <div className="w-5 h-5 bg-gold-400 rounded-full shadow-[0_0_10px_rgba(234,179,8,0.8)]" />
+                  <div className="w-5 h-5 bg-gold-400 rounded-full shadow-[0_0_12px_rgba(234,179,8,0.9)]" />
                 </div>
               </div>
             ) : (
@@ -510,7 +689,10 @@ export function SkillPercentTab({ isActive = true }: { isActive?: boolean }) {
                   >
                     {/* Spinning ring effect when rolling */}
                     {isSpinning && (
-                      <div className="absolute inset-0 rounded-3xl border-2 border-gold-400 border-dashed animate-spin" style={{ animationDuration: '4s' }} />
+                      <div
+                        className="absolute inset-0 rounded-3xl border-2 border-gold-400 border-dashed animate-spin"
+                        style={{ animationDuration: '4s' }}
+                      />
                     )}
 
                     <span className="text-xs font-bold uppercase tracking-wider text-muted mb-0.5">
@@ -527,23 +709,29 @@ export function SkillPercentTab({ isActive = true }: { isActive?: boolean }) {
                       }`}
                     >
                       {isSpinning
-                        ? (scramblingNumber ?? '??')
+                        ? scramblingNumber ?? '??'
                         : lastRoll
                         ? lastRoll.rollNumber
                         : 'd100'}
                     </span>
 
                     {/* Active hovering slice label */}
-                    <div className="mt-1 h-4 flex items-center justify-center px-2">
+                    <div className="mt-1 h-5 flex items-center justify-center px-2">
                       {isSpinning ? (
-                        <span className="text-[10px] font-bold text-gold-400 animate-fade-in truncate max-w-[120px]">
-                          {slicesWithAngles.find((s) => s.id === activeHitSliceId)?.label.split(' ')[0] || 'Scanning…'}
+                        <span className="text-[11px] font-bold text-gold-400 animate-fade-in truncate max-w-[125px]">
+                          {slicesWithAngles.find((s) => s.id === activeHitSliceId)?.label || 'Scanning…'}
                         </span>
                       ) : lastRoll ? (
-                        <span className="text-[11px] font-bold text-emerald-400 flex items-center gap-1">
-                          <span>✓</span>
-                          <span className="truncate max-w-[120px]">{lastRoll.outcome.label}</span>
-                        </span>
+                        <div className="flex items-center gap-1.5 text-[11px] font-bold text-emerald-400 max-w-[130px] truncate">
+                          {lastRoll.outcome.iconType === 'image' && lastRoll.outcome.iconValue ? (
+                            <img src={lastRoll.outcome.iconValue} alt="" className="w-3.5 h-3.5 rounded-full object-cover shrink-0" />
+                          ) : lastRoll.outcome.iconValue ? (
+                            <span>{lastRoll.outcome.iconValue}</span>
+                          ) : (
+                            <span>✓</span>
+                          )}
+                          <span className="truncate">{lastRoll.outcome.label}</span>
+                        </div>
                       ) : (
                         <span className="text-[10px] text-muted">Press Roll below</span>
                       )}
@@ -551,50 +739,61 @@ export function SkillPercentTab({ isActive = true }: { isActive?: boolean }) {
                   </div>
                 </div>
 
-                {/* 1-100 Segmented Bar with Laser Needle */}
-                <div className="w-full flex flex-col gap-1.5 px-2">
-                  <div className="flex items-center justify-between text-xs text-muted font-bold px-1">
-                    <span>Threshold Range: 1%</span>
-                    <span>100%</span>
+                {/* Segmented 1-100 Laser Threshold Scanner Bar */}
+                <div className="w-full max-w-xl flex flex-col gap-2">
+                  <div className="flex items-center justify-between text-xs font-bold text-muted px-1">
+                    <span>Probability Distribution (1–100)</span>
+                    <span className="text-gold-400 font-mono">Position: {scanningPosition}</span>
                   </div>
 
-                  <div className="relative w-full h-14 rounded-2xl overflow-hidden border-2 border-gold-600 flex shadow-2xl bg-surface2">
-                    {slicesWithAngles.map((slice) => {
-                      const isWinning = lastRoll && lastRoll.outcome.id === slice.id && !isSpinning;
-                      const isCurrentlyScanned = isSpinning && activeHitSliceId === slice.id;
+                  <div className="relative w-full h-11 bg-surface rounded-xl overflow-hidden border-2 border-border shadow-inner flex">
+                    {/* Slices representation with icons and % */}
+                    {slicesWithAngles.map((s) => {
+                      const pct = s.deg / 3.6;
+                      if (pct <= 0) return null;
+                      const isHovered = activeHitSliceId === s.id;
+                      const hasImg = s.iconType === 'image' && s.iconValue;
+                      const hasEmo = (s.iconType === 'emoji' || !s.iconType) && s.iconValue;
+
                       return (
                         <div
-                          key={slice.id}
+                          key={s.id}
                           style={{
-                            width: `${slice.percentage}%`,
-                            backgroundColor: slice.color,
+                            width: `${pct}%`,
+                            backgroundColor: s.color,
                           }}
-                          className={`h-full flex flex-col items-center justify-center text-xs font-bold text-white relative transition-all duration-150 select-none ${
-                            isWinning
-                              ? 'ring-4 ring-inset ring-white brightness-125 z-10 shadow-[0_0_20px_rgba(255,255,255,0.7)]'
-                              : isCurrentlyScanned
-                              ? 'brightness-125 scale-y-105 z-10'
-                              : 'opacity-85 hover:opacity-100'
+                          className={`h-full flex items-center justify-center transition-all duration-150 relative overflow-hidden ${
+                            isHovered ? 'brightness-125 ring-2 ring-white z-10 scale-y-110' : 'opacity-90 hover:opacity-100'
                           }`}
+                          title={`${s.label}: ${s.percentage}% (${s.rangeStart}–${s.rangeEnd})`}
                         >
-                          <span className="truncate px-1 drop-shadow-md text-center leading-tight">
-                            {slice.percentage >= 15 ? slice.label.split(' ')[0] : `${slice.percentage}%`}
-                          </span>
-                          <span className="text-[10px] font-mono opacity-90 drop-shadow">
-                            {slice.rangeStart}–{slice.rangeEnd}%
-                          </span>
+                          {pct >= 8 && (
+                            <div className="flex items-center gap-1 px-1 font-bold text-white text-[11px] drop-shadow truncate">
+                              {hasImg ? (
+                                <img src={s.iconValue} alt="" className="w-4 h-4 rounded-full object-cover shrink-0 border border-white/60" />
+                              ) : hasEmo ? (
+                                <span className="text-xs shrink-0">{s.iconValue}</span>
+                              ) : null}
+                              {pct >= 14 && <span className="truncate">{s.percentage}%</span>}
+                            </div>
+                          )}
                         </div>
                       );
                     })}
 
-                    {/* Animated Laser Scanning Needle */}
-                    {(isSpinning || lastRoll) && (
+                    {/* Laser Scanner Line */}
+                    {isSpinning && (
                       <div
-                        className="absolute top-0 bottom-0 w-2.5 bg-white shadow-[0_0_18px_6px_rgba(255,255,255,0.95)] z-30 transition-all duration-75 pointer-events-none rounded-full"
-                        style={{
-                          left: `${isSpinning ? scanningPosition : (lastRoll?.rollNumber ?? 0)}%`,
-                          transform: 'translateX(-50%)',
-                        }}
+                        className="absolute top-0 bottom-0 w-1.5 bg-white shadow-[0_0_15px_#fff,0_0_25px_#ffd700] z-20 pointer-events-none transition-all duration-75"
+                        style={{ left: `calc(${scanningPosition}% - 3px)` }}
+                      />
+                    )}
+
+                    {/* Result Target Marker */}
+                    {!isSpinning && lastRoll && (
+                      <div
+                        className="absolute top-0 bottom-0 w-1 bg-white shadow-[0_0_10px_#fff] z-20 pointer-events-none"
+                        style={{ left: `calc(${lastRoll.rollNumber}% - 2px)` }}
                       >
                         <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-0 h-0 border-l-[7px] border-l-transparent border-r-[7px] border-r-transparent border-t-[9px] border-t-white drop-shadow" />
                         <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-0 h-0 border-l-[7px] border-l-transparent border-r-[7px] border-r-transparent border-b-[9px] border-b-white drop-shadow" />
@@ -629,12 +828,12 @@ export function SkillPercentTab({ isActive = true }: { isActive?: boolean }) {
               {isSpinning ? (
                 <span className="flex items-center justify-center gap-2">
                   <span className="animate-spin">🎲</span>
-                  <span>{viewMode === 'd100bar' ? 'Scanning d100 Threshold…' : 'Calculating Probability…'}</span>
+                  <span>{viewMode === 'd100bar' ? 'Scanning d100 Threshold…' : 'Spinning Party Wheel…'}</span>
                 </span>
               ) : !isHundred ? (
                 `⚠️ Percentages Must Total 100% (Currently ${totalPercentage}%)`
               ) : (
-                `🎲 ${viewMode === 'd100bar' ? 'Roll d100 Percentile' : 'Spin & Roll Outcome'}`
+                `🎲 ${viewMode === 'd100bar' ? 'Roll d100 Percentile' : 'Spin Wheel Outcome'}`
               )}
             </button>
           </div>
@@ -643,22 +842,34 @@ export function SkillPercentTab({ isActive = true }: { isActive?: boolean }) {
           {lastRoll && (
             <div
               className="card w-full p-4 border-2 rounded-xl flex items-center justify-between gap-4 animate-slide-in shadow-xl"
-              style={{ borderColor: lastRoll.outcome.color, backgroundColor: `${lastRoll.outcome.color}15` }}
+              style={{ borderColor: lastRoll.outcome.color, backgroundColor: `${lastRoll.outcome.color}18` }}
             >
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3.5">
+                {/* Visual Badge */}
                 <div
-                  className="w-12 h-12 rounded-xl flex items-center justify-center text-white font-black text-xl shadow-md shrink-0"
+                  className="w-14 h-14 rounded-2xl flex items-center justify-center text-white font-black text-2xl shadow-lg border-2 border-white/30 shrink-0 overflow-hidden"
                   style={{ backgroundColor: lastRoll.outcome.color }}
                 >
-                  ✓
+                  {lastRoll.outcome.iconType === 'image' && lastRoll.outcome.iconValue ? (
+                    <img
+                      src={lastRoll.outcome.iconValue}
+                      alt=""
+                      className="w-full h-full object-cover"
+                    />
+                  ) : lastRoll.outcome.iconValue ? (
+                    <span className="text-3xl select-none">{lastRoll.outcome.iconValue}</span>
+                  ) : (
+                    <span className="text-2xl font-black">✓</span>
+                  )}
                 </div>
+
                 <div>
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-bold uppercase tracking-wider text-muted">
                       Triggered Outcome:
                     </span>
                     <span className="text-xs font-mono px-1.5 py-0.2 rounded bg-surface border border-border text-gold-300">
-                      Roll: {lastRoll.rollNumber} (Range: {lastRoll.rangeStart}–{lastRoll.rangeEnd}%)
+                      Roll: {lastRoll.rollNumber} ({lastRoll.rangeStart}–{lastRoll.rangeEnd}%)
                     </span>
                   </div>
                   <h3 className="font-display font-black text-lg text-white">
@@ -687,13 +898,13 @@ export function SkillPercentTab({ isActive = true }: { isActive?: boolean }) {
           )}
         </div>
 
-        {/* ── Right Column: Outcome Table / Slice Editor (5 cols) ── */}
+        {/* ── Right Column: Outcome Table / Piece Customizer (5 cols) ── */}
         <div className="lg:col-span-5 flex flex-col gap-4">
           <div className="card p-4 flex flex-col gap-3">
-            {/* Skill Name Input & Reset Header */}
+            {/* Skill / Roulette Title */}
             <div className="flex items-center justify-between gap-2">
               <label className="text-xs text-muted font-bold">
-                Skill / Table Name:
+                Wheel / Table Title:
               </label>
               <button
                 type="button"
@@ -710,7 +921,7 @@ export function SkillPercentTab({ isActive = true }: { isActive?: boolean }) {
               value={skillName}
               onChange={(e) => setSkillName(e.target.value)}
               className="input w-full font-bold text-sm text-gold-300"
-              placeholder="e.g. Chaos Strike (25/25/50)"
+              placeholder="e.g. Chaos Strike / Loot Wheel / Party Decisions"
             />
 
             {/* Total Percentage Status Bar */}
@@ -736,94 +947,363 @@ export function SkillPercentTab({ isActive = true }: { isActive?: boolean }) {
               </div>
             </div>
 
-            {/* Outcome Rows */}
-            <div className="flex flex-col gap-2 mt-1">
+            {/* Outcome Rows / Slices */}
+            <div className="flex flex-col gap-2.5 mt-1">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-gold-400 uppercase">
-                  Outcomes / Slices:
+                <span className="text-xs font-bold text-gold-400 uppercase tracking-wider">
+                  Wheel Slices ({outcomes.length}):
                 </span>
-                {outcomes.length < 8 && (
+                {outcomes.length < 16 && (
                   <button
                     type="button"
                     onClick={handleAddOutcome}
-                    className="text-xs text-gold-400 hover:text-gold-200 border border-gold-600/50 rounded px-2 py-0.5 transition-colors"
+                    className="text-xs text-gold-400 hover:text-gold-200 border border-gold-600/50 rounded px-2 py-0.5 transition-colors font-bold"
                   >
-                    + Add Outcome
+                    + Add Piece
                   </button>
                 )}
               </div>
 
-              {outcomes.map((item) => (
-                <div
-                  key={item.id}
-                  className="flex flex-col gap-1.5 p-2.5 rounded-lg bg-surface/60 border border-border"
-                >
-                  <div className="flex items-center gap-2">
-                    {/* Color dot picker */}
-                    <div className="relative group">
-                      <button
-                        type="button"
-                        className="w-6 h-6 rounded-full border border-white/30 shrink-0 shadow"
+              {outcomes.map((item) => {
+                const isExpanded = editingSliceId === item.id;
+                const hasImage = item.iconType === 'image' && item.iconValue;
+                const hasEmoji = (item.iconType === 'emoji' || !item.iconType) && item.iconValue;
+
+                return (
+                  <div
+                    key={item.id}
+                    className={`flex flex-col rounded-xl border transition-all ${
+                      isExpanded
+                        ? 'bg-surface border-gold-500/80 shadow-lg'
+                        : 'bg-surface/70 border-border hover:border-gold-700/50'
+                    }`}
+                  >
+                    {/* Primary Row Controls */}
+                    <div className="flex items-center gap-2 p-2.5">
+                      {/* Native Color Picker Swatch */}
+                      <label
+                        className="relative w-8 h-8 rounded-lg border-2 border-white/40 cursor-pointer overflow-hidden shadow shrink-0 hover:scale-105 transition-transform"
                         style={{ backgroundColor: item.color }}
-                        title="Click to cycle color"
-                        onClick={() => {
-                          const currentIdx = PALETTE.indexOf(item.color);
-                          const nextColor = PALETTE[(currentIdx + 1) % PALETTE.length];
-                          handleUpdateOutcome(item.id, { color: nextColor });
-                        }}
-                      />
-                    </div>
+                        title="Click to pick custom color"
+                      >
+                        <input
+                          type="color"
+                          value={item.color}
+                          onChange={(e) => handleUpdateOutcome(item.id, { color: e.target.value })}
+                          className="opacity-0 absolute inset-0 w-full h-full cursor-pointer"
+                        />
+                      </label>
 
-                    {/* Label */}
-                    <input
-                      type="text"
-                      value={item.label}
-                      onChange={(e) => handleUpdateOutcome(item.id, { label: e.target.value })}
-                      className="input flex-1 text-xs py-1 font-semibold"
-                      placeholder="Outcome label"
-                    />
-
-                    {/* Percentage % */}
-                    <div className="flex items-center gap-1 bg-surface2 border border-border rounded px-2 py-0.5">
-                      <input
-                        type="number"
-                        min={1}
-                        max={100}
-                        value={item.percentage || ''}
-                        onChange={(e) => {
-                          const val = Math.max(0, Math.min(100, parseInt(e.target.value, 10) || 0));
-                          handleUpdateOutcome(item.id, { percentage: val });
-                        }}
-                        className="w-10 text-center text-xs font-bold text-white bg-transparent outline-none"
-                      />
-                      <span className="text-xs font-bold text-muted">%</span>
-                    </div>
-
-                    {/* Delete button */}
-                    {outcomes.length > 1 && (
+                      {/* Icon / Media Preview & Toggle Button */}
                       <button
                         type="button"
-                        onClick={() => handleRemoveOutcome(item.id)}
-                        className="text-red-400 hover:text-red-300 text-base font-bold px-1"
-                        title="Remove outcome"
+                        onClick={() => {
+                          if (isExpanded) {
+                            setEditingSliceId(null);
+                          } else {
+                            setEditingSliceId(item.id);
+                            setIconTab(item.iconType === 'image' ? 'image' : 'emoji');
+                          }
+                        }}
+                        className={`w-8 h-8 rounded-lg border flex items-center justify-center shrink-0 transition-all ${
+                          hasImage || hasEmoji
+                            ? 'bg-surface2 border-gold-600/70 hover:scale-105'
+                            : 'bg-surface2/50 border-border text-muted hover:text-white'
+                        }`}
+                        title="Set Image or Emoji"
                       >
-                        ×
+                        {hasImage ? (
+                          <img
+                            src={item.iconValue}
+                            alt=""
+                            className="w-full h-full rounded-lg object-cover"
+                          />
+                        ) : hasEmoji ? (
+                          <span className="text-base select-none">{item.iconValue}</span>
+                        ) : (
+                          <span className="text-xs">➕</span>
+                        )}
                       </button>
+
+                      {/* Label Input */}
+                      <input
+                        type="text"
+                        value={item.label}
+                        onChange={(e) => handleUpdateOutcome(item.id, { label: e.target.value })}
+                        className="input flex-1 text-xs py-1.5 font-semibold"
+                        placeholder="Piece label"
+                      />
+
+                      {/* Percentage Input */}
+                      <div className="flex items-center gap-1 bg-surface2 border border-border rounded-lg px-2 py-1">
+                        <input
+                          type="number"
+                          min={1}
+                          max={100}
+                          value={item.percentage || ''}
+                          onChange={(e) => {
+                            const val = Math.max(0, Math.min(100, parseInt(e.target.value, 10) || 0));
+                            handleUpdateOutcome(item.id, { percentage: val });
+                          }}
+                          className="w-9 text-center text-xs font-bold text-white bg-transparent outline-none"
+                        />
+                        <span className="text-xs font-bold text-muted">%</span>
+                      </div>
+
+                      {/* Expand / Customize Toggle */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (isExpanded) {
+                            setEditingSliceId(null);
+                          } else {
+                            setEditingSliceId(item.id);
+                            setIconTab(item.iconType === 'image' ? 'image' : 'emoji');
+                          }
+                        }}
+                        className={`p-1.5 rounded-lg text-xs font-bold transition-colors ${
+                          isExpanded
+                            ? 'bg-gold-500/20 text-gold-300'
+                            : 'text-muted hover:text-white hover:bg-surface2'
+                        }`}
+                        title="Customize color, emoji, and image"
+                      >
+                        🎨
+                      </button>
+
+                      {/* Delete button */}
+                      {outcomes.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveOutcome(item.id)}
+                          className="text-red-400 hover:text-red-300 text-lg font-bold px-1"
+                          title="Remove piece"
+                        >
+                          ×
+                        </button>
+                      )}
+                    </div>
+
+                    {/* ── Expanded Full Piece Customizer ── */}
+                    {isExpanded && (
+                      <div className="border-t border-border/80 p-3 bg-surface2/40 flex flex-col gap-3 rounded-b-xl animate-fade-in">
+                        {/* 1. Color Customization (Hex + Presets) */}
+                        <div className="flex flex-col gap-1.5">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-bold text-muted uppercase">
+                              Piece Color:
+                            </span>
+                            <div className="flex items-center gap-1">
+                              <span className="text-[11px] font-mono text-muted">HEX:</span>
+                              <input
+                                type="text"
+                                value={item.color}
+                                onChange={(e) => handleUpdateOutcome(item.id, { color: e.target.value })}
+                                className="w-20 text-[11px] font-mono font-bold px-1.5 py-0.5 rounded bg-surface border border-border text-white text-center"
+                              />
+                            </div>
+                          </div>
+
+                          {/* Quick Color Swatches */}
+                          <div className="flex flex-wrap gap-1.5">
+                            {PRESET_COLORS.map((colorHex) => (
+                              <button
+                                key={colorHex}
+                                type="button"
+                                onClick={() => handleUpdateOutcome(item.id, { color: colorHex })}
+                                className={`w-5 h-5 rounded-md border transition-transform ${
+                                  item.color.toLowerCase() === colorHex.toLowerCase()
+                                    ? 'scale-125 border-white ring-2 ring-gold-400 z-10'
+                                    : 'border-white/20 hover:scale-110'
+                                }`}
+                                style={{ backgroundColor: colorHex }}
+                                title={colorHex}
+                              />
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* 2. Media / Icon Selector (Emoji or Image) */}
+                        <div className="flex flex-col gap-2 border-t border-border/50 pt-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-bold text-muted uppercase">
+                              Piece Media / Icon:
+                            </span>
+                            <div className="flex rounded overflow-hidden border border-border text-[11px] font-semibold">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setIconTab('emoji');
+                                  handleUpdateOutcome(item.id, { iconType: 'emoji' });
+                                }}
+                                className={`px-2 py-0.5 transition-colors ${
+                                  iconTab === 'emoji' ? 'bg-gold-700 text-bg font-bold' : 'bg-surface text-muted hover:text-white'
+                                }`}
+                              >
+                                😀 Emoji
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setIconTab('image');
+                                  handleUpdateOutcome(item.id, { iconType: 'image' });
+                                }}
+                                className={`px-2 py-0.5 transition-colors ${
+                                  iconTab === 'image' ? 'bg-gold-700 text-bg font-bold' : 'bg-surface text-muted hover:text-white'
+                                }`}
+                              >
+                                🖼️ Image
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setIconTab('none');
+                                  handleUpdateOutcome(item.id, { iconType: 'none', iconValue: '' });
+                                }}
+                                className={`px-2 py-0.5 transition-colors ${
+                                  iconTab === 'none' ? 'bg-gold-700 text-bg font-bold' : 'bg-surface text-muted hover:text-white'
+                                }`}
+                              >
+                                None
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Sub-view: Emoji */}
+                          {iconTab === 'emoji' && (
+                            <div className="flex flex-col gap-2">
+                              {/* Popular RPG Emojis Grid */}
+                              <div className="grid grid-cols-10 gap-1 p-1.5 rounded-lg bg-surface border border-border max-h-28 overflow-y-auto">
+                                {COMMON_EMOJIS.map((emoji) => (
+                                  <button
+                                    key={emoji}
+                                    type="button"
+                                    onClick={() =>
+                                      handleUpdateOutcome(item.id, {
+                                        iconType: 'emoji',
+                                        iconValue: emoji,
+                                      })
+                                    }
+                                    className={`w-7 h-7 flex items-center justify-center text-sm rounded hover:bg-gold-900/40 hover:scale-110 transition-all ${
+                                      item.iconValue === emoji ? 'bg-gold-900/60 ring-1 ring-gold-400' : ''
+                                    }`}
+                                    title={emoji}
+                                  >
+                                    {emoji}
+                                  </button>
+                                ))}
+                              </div>
+
+                              {/* Custom Emoji / Text Input */}
+                              <div className="flex items-center gap-2">
+                                <span className="text-[11px] text-muted">Custom Emoji:</span>
+                                <input
+                                  type="text"
+                                  value={item.iconType === 'emoji' ? item.iconValue || '' : ''}
+                                  onChange={(e) =>
+                                    handleUpdateOutcome(item.id, {
+                                      iconType: 'emoji',
+                                      iconValue: e.target.value,
+                                    })
+                                  }
+                                  placeholder="Type or paste any emoji (e.g. 🐉)"
+                                  className="input flex-1 text-xs py-1"
+                                />
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Sub-view: Image */}
+                          {iconTab === 'image' && (
+                            <div className="flex flex-col gap-2.5">
+                              {/* Upload Button + Image URL */}
+                              <div className="flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => handleTriggerImageUpload(item.id)}
+                                  className="btn-gold text-xs py-1.5 px-3 flex items-center gap-1.5 shrink-0"
+                                >
+                                  <span>📁</span>
+                                  <span>Upload Photo</span>
+                                </button>
+                                <span className="text-xs text-muted">or</span>
+                                <input
+                                  type="url"
+                                  value={item.iconType === 'image' ? item.iconValue || '' : ''}
+                                  onChange={(e) =>
+                                    handleUpdateOutcome(item.id, {
+                                      iconType: 'image',
+                                      iconValue: e.target.value,
+                                    })
+                                  }
+                                  placeholder="Paste Image URL (https://...)"
+                                  className="input flex-1 text-xs py-1"
+                                />
+                              </div>
+
+                              {/* Active Image Preview & Remove */}
+                              {hasImage && (
+                                <div className="flex items-center justify-between p-2 rounded bg-surface border border-border">
+                                  <div className="flex items-center gap-2">
+                                    <img
+                                      src={item.iconValue}
+                                      alt="Preview"
+                                      className="w-9 h-9 rounded-lg object-cover border border-gold-600/60 shadow"
+                                    />
+                                    <div className="flex flex-col">
+                                      <span className="text-xs font-bold text-white">Active Image Attached</span>
+                                      <span className="text-[10px] text-muted truncate max-w-[200px]">
+                                        Renders directly on wheel piece
+                                      </span>
+                                    </div>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      handleUpdateOutcome(item.id, {
+                                        iconType: 'none',
+                                        iconValue: '',
+                                      })
+                                    }
+                                    className="text-xs text-red-400 hover:text-red-300 font-semibold"
+                                  >
+                                    Remove
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* 3. Notes / Bonus Effect */}
+                        <div className="flex flex-col gap-1 border-t border-border/50 pt-2">
+                          <label className="text-[11px] font-bold text-muted">
+                            Effect Notes / Combat Details:
+                          </label>
+                          <input
+                            type="text"
+                            value={item.notes || ''}
+                            onChange={(e) => handleUpdateOutcome(item.id, { notes: e.target.value })}
+                            placeholder="e.g. +10 Fire Damage, Target is Burned for 2 turns"
+                            className="input w-full text-xs py-1"
+                          />
+                        </div>
+
+                        {/* Close drawer button */}
+                        <div className="flex justify-end pt-1">
+                          <button
+                            type="button"
+                            onClick={() => setEditingSliceId(null)}
+                            className="text-xs font-bold text-gold-400 hover:text-white px-2 py-1 rounded bg-surface border border-border"
+                          >
+                            ✓ Done Customizing
+                          </button>
+                        </div>
+                      </div>
                     )}
                   </div>
-
-                  {/* Optional notes */}
-                  <div className="pl-8">
-                    <input
-                      type="text"
-                      value={item.notes || ''}
-                      onChange={(e) => handleUpdateOutcome(item.id, { notes: e.target.value })}
-                      placeholder="Notes / Effect (e.g. +5 Fire Dmg, Stun 1 turn)"
-                      className="input w-full text-[11px] py-0.5 text-muted hover:text-white"
-                    />
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
 
@@ -832,7 +1312,7 @@ export function SkillPercentTab({ isActive = true }: { isActive?: boolean }) {
             <div className="card p-3 flex flex-col gap-2">
               <div className="flex items-center justify-between border-b border-border pb-1.5">
                 <span className="font-display font-bold text-xs text-gold-400 uppercase">
-                  📜 Recent Skill Rolls ({history.length})
+                  📜 Recent Spins ({history.length})
                 </span>
                 <button
                   type="button"
@@ -844,23 +1324,40 @@ export function SkillPercentTab({ isActive = true }: { isActive?: boolean }) {
               </div>
 
               <div className="flex flex-col gap-1.5 max-h-48 overflow-y-auto pr-1 scrollbar-thin">
-                {history.map((h) => (
-                  <div
-                    key={h.id}
-                    className="flex items-center justify-between p-1.5 rounded bg-surface2/40 border border-border text-xs"
-                  >
-                    <div className="flex items-center gap-2">
-                      <span
-                        className="w-2.5 h-2.5 rounded-full"
-                        style={{ backgroundColor: h.winningOutcome.color }}
-                      />
-                      <span className="font-bold text-white">{h.winningOutcome.label}</span>
+                {history.map((h) => {
+                  const isImg = h.winningOutcome.iconType === 'image' && h.winningOutcome.iconValue;
+                  const isEmo = (h.winningOutcome.iconType === 'emoji' || !h.winningOutcome.iconType) && h.winningOutcome.iconValue;
+
+                  return (
+                    <div
+                      key={h.id}
+                      className="flex items-center justify-between p-1.5 rounded bg-surface2/40 border border-border text-xs"
+                    >
+                      <div className="flex items-center gap-2">
+                        {isImg ? (
+                          <img
+                            src={h.winningOutcome.iconValue}
+                            alt=""
+                            className="w-4 h-4 rounded-full object-cover border border-white/40 shrink-0"
+                          />
+                        ) : isEmo ? (
+                          <span className="text-sm shrink-0">{h.winningOutcome.iconValue}</span>
+                        ) : (
+                          <span
+                            className="w-2.5 h-2.5 rounded-full shrink-0"
+                            style={{ backgroundColor: h.winningOutcome.color }}
+                          />
+                        )}
+                        <span className="font-bold text-white truncate max-w-[170px]">
+                          {h.winningOutcome.label}
+                        </span>
+                      </div>
+                      <span className="font-mono text-gold-300 text-[11px] shrink-0">
+                        d100: {h.rollNumber}
+                      </span>
                     </div>
-                    <span className="font-mono text-gold-300 text-[11px]">
-                      d100: {h.rollNumber}
-                    </span>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}

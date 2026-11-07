@@ -7,6 +7,8 @@ export interface SkillOutcome {
   label: string;
   percentage: number; // e.g. 25 (means 25%)
   color: string;      // HEX color code for wheel slice & badge
+  iconType?: 'emoji' | 'image' | 'none'; // Type of icon
+  iconValue?: string; // Emoji text (e.g. '🔥') or Image URL / base64 data URL
   bonusDamage?: number;
   notes?: string;
 }
