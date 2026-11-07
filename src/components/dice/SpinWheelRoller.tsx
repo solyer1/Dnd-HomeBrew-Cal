@@ -64,6 +64,7 @@ export interface WheelUserPreset {
   id: string;
   name: string;
   diceType: DiceType;
+  slotOrder?: number[];
   weights: Record<number, number>;
   slotConfigs: Record<number, SlotCustomConfig>;
 }
@@ -480,14 +481,39 @@ export function SpinWheelRoller({ onResult, rollMode = 'normal' }: SpinWheelRoll
     }
   };
 
+  // Active order of slots around the wheel circumference
+  const activeOrder = useMemo(() => {
+    if (
+      currentPreset.slotOrder &&
+      Array.isArray(currentPreset.slotOrder) &&
+      currentPreset.slotOrder.length === slots.length &&
+      slots.every((s) => currentPreset.slotOrder?.includes(s))
+    ) {
+      return currentPreset.slotOrder;
+    }
+    return slots;
+  }, [currentPreset.slotOrder, slots]);
+
   const shuffleSlots = () => {
     if (isSpinning) return;
-    const shuffled = [...slots].sort(() => Math.random() - 0.5);
-    const newWeights: Record<number, number> = {};
-    shuffled.forEach((s, idx) => {
-      newWeights[s] = weights[slots[idx]] ?? 1;
+    const shuffled = [...activeOrder];
+    // True Fisher-Yates shuffle
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    handleUpdateCurrentPreset({ slotOrder: shuffled });
+
+    // Haptic arrow wobble animation
+    arrowControls.start({
+      rotate: [0, -18, 14, -8, 0],
+      transition: { duration: 0.25 },
     });
-    handleUpdateCurrentPreset({ weights: newWeights });
+  };
+
+  const handleResetOrder = () => {
+    if (isSpinning) return;
+    handleUpdateCurrentPreset({ slotOrder: [...slots] });
   };
 
   // Calculate slice geometry based on weights
@@ -522,7 +548,7 @@ export function SpinWheelRoller({ onResult, rollMode = 'normal' }: SpinWheelRoll
   };
   
   let currentAngle = 0;
-  const sliceAngles = slots.map((slot) => {
+  const sliceAngles = activeOrder.map((slot) => {
     const weight = weights[slot] ?? 1;
     const angle = (weight / totalWeight) * 360;
     const start = currentAngle;
@@ -578,11 +604,11 @@ export function SpinWheelRoller({ onResult, rollMode = 'normal' }: SpinWheelRoll
           setIsSpinning(false);
           const topAngle1 = (360 - (newRotation1 % 360)) % 360;
           const winningSlice1 = sliceAngles.find((s) => topAngle1 >= s.start && topAngle1 < s.end);
-          const result1 = winningSlice1 ? winningSlice1.slot : slots[0];
+          const result1 = winningSlice1 ? winningSlice1.slot : activeOrder[0];
           
           const topAngle2 = (360 - (newRotation2 % 360)) % 360;
           const winningSlice2 = sliceAngles.find((s) => topAngle2 >= s.start && topAngle2 < s.end);
-          const result2 = winningSlice2 ? winningSlice2.slot : slots[0];
+          const result2 = winningSlice2 ? winningSlice2.slot : activeOrder[0];
           
           const finalResult = rollMode === 'advantage' ? Math.max(result1, result2) : Math.min(result1, result2);
           
@@ -651,8 +677,8 @@ export function SpinWheelRoller({ onResult, rollMode = 'normal' }: SpinWheelRoll
         const topAngle = (360 - normalizedRotation) % 360;
         
         const winningSlice = sliceAngles.find((s) => topAngle >= s.start && topAngle < s.end);
-        const result = winningSlice ? winningSlice.slot : slots[0];
-        const numSlots = slots.length;
+        const result = winningSlice ? winningSlice.slot : activeOrder[0];
+        const numSlots = activeOrder.length;
         
         // Fire confetti and win sound
         playWinSound();
@@ -853,18 +879,33 @@ export function SpinWheelRoller({ onResult, rollMode = 'normal' }: SpinWheelRoll
         </div>
 
         {/* Controls */}
-        <div className="flex flex-col gap-4 w-full max-w-xs">
-          <button
-            onClick={shuffleSlots}
-            disabled={isSpinning}
-            className={`py-3 px-4 rounded-xl font-bold border-2 transition-all ${
-              isSpinning 
-                ? 'border-gold-900 bg-gold-950/50 text-gold-800 cursor-not-allowed'
-                : 'border-gold-600 bg-gold-900/30 text-gold-400 hover:bg-gold-800/40 hover:shadow-[0_0_15px_rgba(201,168,76,0.3)]'
-            }`}
-          >
-            🔀 Shuffle Slots
-          </button>
+        <div className="flex flex-col gap-3.5 w-full max-w-xs">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={shuffleSlots}
+              disabled={isSpinning}
+              className={`flex-1 py-3 px-4 rounded-xl font-bold border-2 transition-all flex items-center justify-center gap-2 text-sm shadow ${
+                isSpinning 
+                  ? 'border-gold-900 bg-gold-950/50 text-gold-800 cursor-not-allowed'
+                  : 'border-gold-600 bg-gold-900/30 text-gold-300 hover:bg-gold-800/40 hover:text-white hover:shadow-[0_0_15px_rgba(201,168,76,0.3)] active:scale-95'
+              }`}
+              title="Randomize the positions of all pieces around the wheel"
+            >
+              <span>🔀</span>
+              <span>Shuffle Slots</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleResetOrder}
+              disabled={isSpinning}
+              className="py-3 px-3 rounded-xl font-bold border border-border bg-surface text-muted hover:text-white hover:border-gold-600 transition-all text-xs"
+              title="Reset wheel pieces to sequential order (1, 2, 3...)"
+            >
+              🔢 1..N
+            </button>
+          </div>
           
           <button
             onClick={spin}
