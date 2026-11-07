@@ -3,21 +3,24 @@
 /**
  * SpinWheelRoller
  * Dice wheel roller for d1..d100 with advantage/disadvantage.
- * Fully customizable:
- * - Custom color per piece (native color picker + hex + presets)
- * - Custom Image or Emoji per piece (photo upload with auto-resize, image URL, or RPG emoji picker)
- * - Custom labels per piece (e.g. "Nat 20", "Fumble", "Fireball")
- * - Probability adjustment sliders
- * - Result popups with custom media celebration
- * - Automatic localStorage persistence
+ * Features:
+ * - User/Character Presets: Save, switch, duplicate, and delete custom wheels per player/character
+ * - Clean Face Chips Selector + Dedicated Focused Inspector (no messy expanding grid)
+ * - Custom colors per face (native color picker + hex input + 16 preset palette swatches)
+ * - Custom Images or Emojis per face (auto-resized local upload, image URL, 40+ RPG emoji picker)
+ * - Custom labels & probability sliders per piece
+ * - Live Piece Preview badge with immediate visual feedback on the wheel
+ * - Result popups with custom media celebration & confetti
+ * - Full localStorage persistence
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useAppContext } from '@/context/AppContext';
 import { DiceType, RollResult } from '@/types/dice';
 import { useTranslation } from '@/hooks/useTranslation';
 import { motion, AnimatePresence, useAnimation, useMotionValue, animate } from 'framer-motion';
 import confetti from 'canvas-confetti';
+import { generateId } from '@/utils/math';
 
 const DICE_TYPES: DiceType[] = [
   'd1', 'd2', 'd3', 'd4', 'd5', 'd6', 'd7', 'd8', 'd9', 'd10',
@@ -57,7 +60,52 @@ export interface SlotCustomConfig {
   label?: string;
 }
 
+export interface WheelUserPreset {
+  id: string;
+  name: string;
+  diceType: DiceType;
+  weights: Record<number, number>;
+  slotConfigs: Record<number, SlotCustomConfig>;
+}
+
 const getDiceSides = (type: DiceType) => parseInt(type.substring(1), 10);
+
+const DEFAULT_PRESETS: WheelUserPreset[] = [
+  {
+    id: 'preset-standard-d20',
+    name: 'Standard d20',
+    diceType: 'd20',
+    weights: Object.fromEntries(Array.from({ length: 20 }, (_, i) => [i + 1, 1])),
+    slotConfigs: {
+      20: { color: '#eab308', iconType: 'emoji', iconValue: '👑', label: '20' },
+      1:  { color: '#ef4444', iconType: 'emoji', iconValue: '💀', label: '1' },
+    },
+  },
+  {
+    id: 'preset-crit-fumble',
+    name: 'Critical & Fumble Focus',
+    diceType: 'd20',
+    weights: Object.fromEntries(Array.from({ length: 20 }, (_, i) => [i + 1, 1])),
+    slotConfigs: {
+      20: { color: '#eab308', iconType: 'emoji', iconValue: '🌟', label: 'Crit 20' },
+      1:  { color: '#dc2626', iconType: 'emoji', iconValue: '💀', label: 'Fail 1' },
+      10: { color: '#3b82f6', iconType: 'emoji', iconValue: '⚔️', label: 'Mid 10' },
+    },
+  },
+  {
+    id: 'preset-elemental-chaos',
+    name: 'Elemental Chaos Wheel',
+    diceType: 'd20',
+    weights: Object.fromEntries(Array.from({ length: 20 }, (_, i) => [i + 1, 1])),
+    slotConfigs: {
+      20: { color: '#eab308', iconType: 'emoji', iconValue: '✨', label: 'Jackpot' },
+      19: { color: '#ef4444', iconType: 'emoji', iconValue: '🔥', label: 'Flame' },
+      18: { color: '#06b6d4', iconType: 'emoji', iconValue: '❄️', label: 'Frost' },
+      17: { color: '#8b5cf6', iconType: 'emoji', iconValue: '⚡', label: 'Shock' },
+      1:  { color: '#18181b', iconType: 'emoji', iconValue: '💀', label: 'Void' },
+    },
+  },
+];
 
 /**
  * Resizes an uploaded image file down to max 128x128 pixels using an offscreen canvas.
@@ -259,10 +307,13 @@ export function SpinWheelRoller({ onResult, rollMode = 'normal' }: SpinWheelRoll
   const { t } = useTranslation();
   
   const [selectedDie, setSelectedDie] = useState<DiceType>('d20');
-  const [slots, setSlots] = useState<number[]>([]);
-  const [weights, setWeights] = useState<Record<number, number>>({});
-  const [slotConfigs, setSlotConfigs] = useState<Record<number, SlotCustomConfig>>({});
-  const [editingSlot, setEditingSlot] = useState<number | null>(null);
+  
+  // ── Preset System ──
+  const [presets, setPresets] = useState<WheelUserPreset[]>(DEFAULT_PRESETS);
+  const [activePresetId, setActivePresetId] = useState<string>('preset-standard-d20');
+  
+  // Active selected face to inspect in the focused panel
+  const [selectedFace, setSelectedFace] = useState<number>(20);
   const [iconSubTab, setIconSubTab] = useState<'emoji' | 'image' | 'none'>('emoji');
 
   const [isSpinning, setIsSpinning] = useState(false);
@@ -282,68 +333,125 @@ export function SpinWheelRoller({ onResult, rollMode = 'normal' }: SpinWheelRoll
     mode: 'advantage' | 'disadvantage';
   } | null>(null);
 
-  // Initialize slots and load saved custom configs for selectedDie
+  // Restore presets from localStorage on mount
   useEffect(() => {
-    const sides = getDiceSides(selectedDie);
-    const newSlots = Array.from({ length: sides }, (_, i) => i + 1);
-    
-    const newWeights: Record<number, number> = {};
-    newSlots.forEach(slot => (newWeights[slot] = 1));
-    
-    setSlots(newSlots);
-    setWeights(newWeights);
-    rotationValue.set(0);
-    rotationValue2.set(0);
-    setEditingSlot(null);
-
-    // Restore custom slot configs from localStorage
     try {
-      const saved = localStorage.getItem(`dnd_dice_wheel_configs_${selectedDie}`);
+      const saved = localStorage.getItem('dnd_dice_wheel_presets_v2');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (parsed && typeof parsed === 'object') {
-          setSlotConfigs(parsed);
-          return;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setPresets(parsed);
+          setActivePresetId(parsed[0].id);
         }
       }
     } catch {}
+  }, []);
 
-    // Default configs for d20 (e.g. 20 is Gold with crown/star, 1 is Crimson with skull)
-    if (selectedDie === 'd20') {
-      setSlotConfigs({
-        20: { color: '#eab308', iconType: 'emoji', iconValue: '👑', label: '20' },
-        1:  { color: '#ef4444', iconType: 'emoji', iconValue: '💀', label: '1' },
-      });
-    } else {
-      setSlotConfigs({});
-    }
-  }, [selectedDie]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Save custom slot configs to localStorage automatically
+  // Save presets automatically
   useEffect(() => {
     try {
-      if (Object.keys(slotConfigs).length > 0) {
-        localStorage.setItem(`dnd_dice_wheel_configs_${selectedDie}`, JSON.stringify(slotConfigs));
-      }
+      localStorage.setItem('dnd_dice_wheel_presets_v2', JSON.stringify(presets));
     } catch {}
-  }, [slotConfigs, selectedDie]);
+  }, [presets]);
 
-  const updateSlotConfig = (slot: number, patch: Partial<SlotCustomConfig>) => {
-    setSlotConfigs(prev => ({
-      ...prev,
-      [slot]: {
-        ...(prev[slot] || {}),
-        ...patch,
-      },
-    }));
+  // Current active preset
+  const currentPreset = useMemo(() => {
+    const found = presets.find((p) => p.id === activePresetId);
+    return found || presets[0] || DEFAULT_PRESETS[0];
+  }, [presets, activePresetId]);
+
+  // Synchronize die selection when switching preset
+  useEffect(() => {
+    if (currentPreset.diceType !== selectedDie) {
+      setSelectedDie(currentPreset.diceType);
+    }
+  }, [currentPreset.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Derived slots array for current die
+  const slots = useMemo(() => {
+    const sides = getDiceSides(selectedDie);
+    return Array.from({ length: sides }, (_, i) => i + 1);
+  }, [selectedDie]);
+
+  // Ensure selectedFace is within bounds
+  useEffect(() => {
+    if (!slots.includes(selectedFace)) {
+      setSelectedFace(slots[slots.length - 1] || 1);
+    }
+  }, [slots, selectedFace]);
+
+  const weights = currentPreset.weights || {};
+  const slotConfigs = currentPreset.slotConfigs || {};
+
+  // Preset operations
+  const handleUpdateCurrentPreset = (patch: Partial<WheelUserPreset>) => {
+    setPresets((prev) =>
+      prev.map((p) => (p.id === currentPreset.id ? { ...p, ...patch } : p))
+    );
   };
 
-  const handleResetSlotsConfig = () => {
-    if (confirm(`Reset all custom colors, images, and emojis for ${selectedDie}?`)) {
-      setSlotConfigs({});
-      try {
-        localStorage.removeItem(`dnd_dice_wheel_configs_${selectedDie}`);
-      } catch {}
+  const handleCreateNewPreset = () => {
+    const newName = prompt('Enter preset name (e.g. Alice D20, Bob Rogue Wheel):', `Custom ${selectedDie} #${presets.length + 1}`);
+    if (!newName) return;
+
+    const newPreset: WheelUserPreset = {
+      id: generateId(),
+      name: newName.trim(),
+      diceType: selectedDie,
+      weights: Object.fromEntries(slots.map((s) => [s, 1])),
+      slotConfigs: {
+        [slots[slots.length - 1]]: { color: '#eab308', iconType: 'emoji', iconValue: '👑', label: `${slots[slots.length - 1]}` },
+        1: { color: '#ef4444', iconType: 'emoji', iconValue: '💀', label: '1' },
+      },
+    };
+
+    setPresets((prev) => [...prev, newPreset]);
+    setActivePresetId(newPreset.id);
+  };
+
+  const handleDuplicatePreset = () => {
+    const cloned: WheelUserPreset = {
+      ...currentPreset,
+      id: generateId(),
+      name: `Copy of ${currentPreset.name}`,
+    };
+    setPresets((prev) => [...prev, cloned]);
+    setActivePresetId(cloned.id);
+  };
+
+  const handleDeletePreset = () => {
+    if (presets.length <= 1) return;
+    if (confirm(`Delete preset "${currentPreset.name}"?`)) {
+      const remaining = presets.filter((p) => p.id !== currentPreset.id);
+      setPresets(remaining);
+      setActivePresetId(remaining[0].id);
+    }
+  };
+
+  const handleRenamePreset = (newName: string) => {
+    handleUpdateCurrentPreset({ name: newName });
+  };
+
+  const updateSlotConfig = (slot: number, patch: Partial<SlotCustomConfig>) => {
+    const nextConfigs = {
+      ...slotConfigs,
+      [slot]: {
+        ...(slotConfigs[slot] || {}),
+        ...patch,
+      },
+    };
+    handleUpdateCurrentPreset({ slotConfigs: nextConfigs });
+  };
+
+  const handleEqualizeWeights = () => {
+    const equalWeights: Record<number, number> = {};
+    slots.forEach((s) => (equalWeights[s] = 1));
+    handleUpdateCurrentPreset({ weights: equalWeights });
+  };
+
+  const handleResetFaceConfigs = () => {
+    if (confirm(`Reset all custom colors, emojis, and images for "${currentPreset.name}"?`)) {
+      handleUpdateCurrentPreset({ slotConfigs: {} });
     }
   };
 
@@ -375,44 +483,46 @@ export function SpinWheelRoller({ onResult, rollMode = 'normal' }: SpinWheelRoll
   const shuffleSlots = () => {
     if (isSpinning) return;
     const shuffled = [...slots].sort(() => Math.random() - 0.5);
-    setSlots(shuffled);
+    const newWeights: Record<number, number> = {};
+    shuffled.forEach((s, idx) => {
+      newWeights[s] = weights[slots[idx]] ?? 1;
+    });
+    handleUpdateCurrentPreset({ weights: newWeights });
   };
 
   // Calculate slice geometry based on weights
-  const totalWeight = slots.reduce((sum, slot) => sum + (weights[slot] || 0), 0) || 1; 
+  const totalWeight = slots.reduce((sum, slot) => sum + (weights[slot] ?? 1), 0) || 1; 
   
   const handlePercentageChange = (slot: number, newP: number) => {
     const p = Math.max(0, Math.min(100, newP)) / 100;
-    
-    setWeights(prev => {
-      const othersSum = Object.entries(prev)
-        .filter(([k]) => parseInt(k) !== slot)
-        .reduce((sum, [_, w]) => sum + w, 0);
-        
-      const next = { ...prev };
-      
-      if (p === 1) {
-        Object.keys(next).forEach(k => (next[parseInt(k)] = 0));
-        next[slot] = 1;
-      } else if (p === 0) {
-        next[slot] = 0;
-        if (othersSum === 0) {
-          Object.keys(next).forEach(k => { if (parseInt(k) !== slot) next[parseInt(k)] = 1; });
-        }
-      } else {
-        let S = othersSum;
-        if (S === 0) {
-          Object.keys(next).forEach(k => { if (parseInt(k) !== slot) next[parseInt(k)] = 1; });
-          S = Object.keys(next).length - 1;
-        }
-        next[slot] = S * (p / (1 - p));
+    const othersSum = Object.entries(weights)
+      .filter(([k]) => parseInt(k, 10) !== slot)
+      .reduce((sum, [, w]) => sum + w, 0);
+
+    const nextWeights = { ...weights };
+
+    if (p === 1) {
+      Object.keys(nextWeights).forEach((k) => (nextWeights[parseInt(k, 10)] = 0));
+      nextWeights[slot] = 1;
+    } else if (p === 0) {
+      nextWeights[slot] = 0;
+      if (othersSum === 0) {
+        slots.forEach((s) => { if (s !== slot) nextWeights[s] = 1; });
       }
-      return next;
-    });
+    } else {
+      let S = othersSum;
+      if (S === 0) {
+        slots.forEach((s) => { if (s !== slot) nextWeights[s] = 1; });
+        S = slots.length - 1;
+      }
+      nextWeights[slot] = S * (p / (1 - p));
+    }
+
+    handleUpdateCurrentPreset({ weights: nextWeights });
   };
   
   let currentAngle = 0;
-  const sliceAngles = slots.map(slot => {
+  const sliceAngles = slots.map((slot) => {
     const weight = weights[slot] ?? 1;
     const angle = (weight / totalWeight) * 360;
     const start = currentAngle;
@@ -443,7 +553,7 @@ export function SpinWheelRoller({ onResult, rollMode = 'normal' }: SpinWheelRoll
         ease: [0.1, 0.7, 0.1, 1],
         onUpdate: (latest) => {
           const topAngle = (360 - (latest % 360)) % 360;
-          const currentSliceIndex = sliceAngles.findIndex(s => topAngle >= s.start && topAngle < s.end);
+          const currentSliceIndex = sliceAngles.findIndex((s) => topAngle >= s.start && topAngle < s.end);
           if (currentSliceIndex !== -1 && lastSliceIndex1 !== -1 && currentSliceIndex !== lastSliceIndex1) {
             if (ctx) playTick(ctx);
             arrowControls.start({ rotate: [0, -25, 0], transition: { duration: 0.15 } });
@@ -457,7 +567,7 @@ export function SpinWheelRoller({ onResult, rollMode = 'normal' }: SpinWheelRoll
         ease: [0.1, 0.7, 0.1, 1],
         onUpdate: (latest) => {
           const topAngle = (360 - (latest % 360)) % 360;
-          const currentSliceIndex = sliceAngles.findIndex(s => topAngle >= s.start && topAngle < s.end);
+          const currentSliceIndex = sliceAngles.findIndex((s) => topAngle >= s.start && topAngle < s.end);
           if (currentSliceIndex !== -1 && lastSliceIndex2 !== -1 && currentSliceIndex !== lastSliceIndex2) {
             if (ctx) playTick(ctx);
             arrowControls2.start({ rotate: [0, -25, 0], transition: { duration: 0.15 } });
@@ -467,11 +577,11 @@ export function SpinWheelRoller({ onResult, rollMode = 'normal' }: SpinWheelRoll
         onComplete: () => {
           setIsSpinning(false);
           const topAngle1 = (360 - (newRotation1 % 360)) % 360;
-          const winningSlice1 = sliceAngles.find(s => topAngle1 >= s.start && topAngle1 < s.end);
+          const winningSlice1 = sliceAngles.find((s) => topAngle1 >= s.start && topAngle1 < s.end);
           const result1 = winningSlice1 ? winningSlice1.slot : slots[0];
           
           const topAngle2 = (360 - (newRotation2 % 360)) % 360;
-          const winningSlice2 = sliceAngles.find(s => topAngle2 >= s.start && topAngle2 < s.end);
+          const winningSlice2 = sliceAngles.find((s) => topAngle2 >= s.start && topAngle2 < s.end);
           const result2 = winningSlice2 ? winningSlice2.slot : slots[0];
           
           const finalResult = rollMode === 'advantage' ? Math.max(result1, result2) : Math.min(result1, result2);
@@ -523,7 +633,7 @@ export function SpinWheelRoller({ onResult, rollMode = 'normal' }: SpinWheelRoll
       onUpdate: (latest) => {
         const normalizedRotation = latest % 360;
         const topAngle = (360 - normalizedRotation) % 360;
-        const currentSliceIndex = sliceAngles.findIndex(s => topAngle >= s.start && topAngle < s.end);
+        const currentSliceIndex = sliceAngles.findIndex((s) => topAngle >= s.start && topAngle < s.end);
         
         if (currentSliceIndex !== -1 && lastSliceIndex !== -1 && currentSliceIndex !== lastSliceIndex) {
           if (ctx) playTick(ctx);
@@ -540,7 +650,7 @@ export function SpinWheelRoller({ onResult, rollMode = 'normal' }: SpinWheelRoll
         const normalizedRotation = newRotation % 360;
         const topAngle = (360 - normalizedRotation) % 360;
         
-        const winningSlice = sliceAngles.find(s => topAngle >= s.start && topAngle < s.end);
+        const winningSlice = sliceAngles.find((s) => topAngle >= s.start && topAngle < s.end);
         const result = winningSlice ? winningSlice.slot : slots[0];
         const numSlots = slots.length;
         
@@ -598,12 +708,16 @@ export function SpinWheelRoller({ onResult, rollMode = 'normal' }: SpinWheelRoll
         className="hidden"
       />
 
-      {/* Dice Selection Tabs */}
+      {/* ── Dice Selection Tabs ── */}
       <div className="flex flex-wrap gap-2 justify-center bg-surface p-2 rounded-xl border border-border">
         {DICE_TYPES.map((type) => (
           <button
             key={type}
-            onClick={() => !isSpinning && setSelectedDie(type)}
+            onClick={() => {
+              if (isSpinning) return;
+              setSelectedDie(type);
+              handleUpdateCurrentPreset({ diceType: type });
+            }}
             disabled={isSpinning}
             className={`px-4 py-2 rounded-lg font-bold transition-all ${
               selectedDie === type
@@ -616,6 +730,70 @@ export function SpinWheelRoller({ onResult, rollMode = 'normal' }: SpinWheelRoll
         ))}
       </div>
 
+      {/* ── User Presets Bar ── */}
+      <div className="card p-3 flex flex-col md:flex-row items-start md:items-center justify-between gap-3 bg-surface/90 border border-gold-800/40 shadow-lg">
+        <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto">
+          <span className="text-xs font-bold text-gold-400 uppercase tracking-wider flex items-center gap-1 shrink-0">
+            <span>👤</span>
+            <span>Player Preset:</span>
+          </span>
+
+          {/* Preset Select Dropdown */}
+          <select
+            value={activePresetId}
+            onChange={(e) => setActivePresetId(e.target.value)}
+            className="bg-surface2 text-xs font-bold text-white border border-border rounded-lg px-3 py-1.5 outline-none hover:border-gold-500 transition-colors cursor-pointer"
+          >
+            {presets.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name} ({p.diceType})
+              </option>
+            ))}
+          </select>
+
+          {/* Preset Name Editor */}
+          <input
+            type="text"
+            value={currentPreset.name}
+            onChange={(e) => handleRenamePreset(e.target.value)}
+            placeholder="Preset Name"
+            className="input text-xs py-1 px-2.5 font-bold text-gold-300 w-44"
+          />
+        </div>
+
+        {/* Preset Action Buttons */}
+        <div className="flex items-center gap-1.5 self-end md:self-auto">
+          <button
+            type="button"
+            onClick={handleCreateNewPreset}
+            className="btn-gold text-xs py-1.5 px-3 flex items-center gap-1 font-bold shadow"
+            title="Create a new preset for a party member or custom wheel"
+          >
+            <span>+</span>
+            <span>New Preset</span>
+          </button>
+          <button
+            type="button"
+            onClick={handleDuplicatePreset}
+            className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-surface2 border border-border text-muted hover:text-white transition-colors"
+            title="Duplicate this preset"
+          >
+            📋 Clone
+          </button>
+          {presets.length > 1 && (
+            <button
+              type="button"
+              onClick={handleDeletePreset}
+              className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-red-950/30 border border-red-800/50 text-red-400 hover:text-red-200 transition-colors"
+              title="Delete this preset"
+            >
+              🗑️
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* ── Wheel & Roll Controls ── */}
       <div className="flex flex-col md:flex-row gap-8 items-center justify-center">
         {/* Wheel container */}
         <div className="relative flex items-center justify-center">
@@ -702,293 +880,360 @@ export function SpinWheelRoller({ onResult, rollMode = 'normal' }: SpinWheelRoll
         </div>
       </div>
       
-      {/* ── Fully Customizable Pieces Panel ── */}
+      {/* ── Clean Face Chips Bar + Focused Inspector ── */}
       {numSlots <= 24 && (
-        <div className="w-full mt-4 flex flex-col gap-3">
-          <div className="flex items-center justify-between border-b border-border/80 pb-2">
-            <div>
-              <h3 className="text-sm font-bold text-gold-400 flex items-center gap-2">
-                <span>🎨</span>
-                <span>Customize Pieces (Color, Image, Emoji & Probabilities)</span>
-              </h3>
-              <p className="text-xs text-muted">
-                Assign custom piece colors, upload photos or pick emojis for each face of {selectedDie}.
-              </p>
+        <div className="card p-4 flex flex-col gap-3.5 bg-surface/90 border border-border shadow-xl">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 border-b border-border/80 pb-2.5">
+            <div className="flex items-center gap-2">
+              <span className="text-base">🎯</span>
+              <span className="font-display font-bold text-sm text-gold-400 uppercase tracking-wider">
+                Wheel Faces ({slots.length})
+              </span>
+              <span className="text-xs text-muted hidden sm:inline">
+                — Click any face to edit its color, emoji/photo & odds
+              </span>
             </div>
-            
-            <button
-              type="button"
-              onClick={handleResetSlotsConfig}
-              className="text-xs text-muted hover:text-red-400 border border-border px-2 py-1 rounded transition-colors"
-              title="Reset all customized colors and icons"
-            >
-              ↺ Reset Pieces
-            </button>
+
+            <div className="flex items-center gap-2 self-end sm:self-auto">
+              <button
+                type="button"
+                onClick={handleEqualizeWeights}
+                className="text-[11px] font-semibold text-muted hover:text-gold-300 border border-border px-2.5 py-1 rounded-lg transition-colors"
+                title="Set all faces to equal probability"
+              >
+                ⚖️ Equalize (All {(100 / slots.length).toFixed(1)}%)
+              </button>
+              <button
+                type="button"
+                onClick={handleResetFaceConfigs}
+                className="text-[11px] font-semibold text-muted hover:text-red-400 border border-border px-2.5 py-1 rounded-lg transition-colors"
+                title="Reset all custom colors and icons for this preset"
+              >
+                ↺ Reset Colors
+              </button>
+            </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            {slots.map(slot => {
-              const currentPercent = Math.round((((weights[slot] ?? 1) / totalWeight) * 100));
+          {/* Compact Face Chips Grid */}
+          <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-10 gap-2">
+            {slots.map((slot) => {
               const cfg = slotConfigs[slot] || {};
-              const isExpanded = editingSlot === slot;
+              const isSelected = selectedFace === slot;
+              const weight = weights[slot] ?? 1;
+              const pct = Math.round((weight / totalWeight) * 100);
               const hasImg = cfg.iconType === 'image' && cfg.iconValue;
               const hasEmo = (cfg.iconType === 'emoji' || !cfg.iconType) && cfg.iconValue;
 
               return (
-                <div 
-                  key={slot} 
-                  className={`flex flex-col rounded-xl border p-2.5 transition-all ${
-                    isExpanded 
-                      ? 'bg-surface border-gold-500 shadow-lg' 
-                      : 'bg-surface/70 border-border hover:border-gold-700/60'
+                <button
+                  key={slot}
+                  type="button"
+                  onClick={() => setSelectedFace(slot)}
+                  className={`flex flex-col items-center justify-center p-2 rounded-xl border text-center transition-all cursor-pointer relative ${
+                    isSelected
+                      ? 'border-gold-400 bg-gold-950/80 ring-2 ring-gold-400/70 shadow-gold scale-105 z-10'
+                      : 'border-border bg-surface2/50 hover:bg-surface2 hover:border-gold-700/60'
                   }`}
+                  style={{
+                    borderLeftColor: cfg.color ? cfg.color : undefined,
+                    borderLeftWidth: cfg.color ? '4px' : undefined,
+                  }}
                 >
-                  {/* Card Header: Color picker, icon button, face number, percentage */}
-                  <div className="flex items-center gap-2">
-                    {/* Color Swatch / Native Color Picker */}
-                    <label 
-                      className="relative w-7 h-7 rounded-lg border-2 border-white/40 cursor-pointer overflow-hidden shadow shrink-0 hover:scale-105 transition-transform"
-                      style={{ backgroundColor: cfg.color || '#1e1c36' }}
-                      title="Click to pick piece color"
-                    >
-                      <input
-                        type="color"
-                        value={cfg.color || '#1e1c36'}
-                        onChange={(e) => updateSlotConfig(slot, { color: e.target.value })}
-                        className="opacity-0 absolute inset-0 w-full h-full cursor-pointer"
+                  {/* Top row: Color pill / icon + slot number */}
+                  <div className="flex items-center gap-1.5">
+                    {hasImg ? (
+                      <img src={cfg.iconValue} alt="" className="w-3.5 h-3.5 rounded-full object-cover shrink-0" />
+                    ) : hasEmo ? (
+                      <span className="text-xs select-none shrink-0">{cfg.iconValue}</span>
+                    ) : (
+                      <span
+                        className="w-2.5 h-2.5 rounded-full shrink-0 border border-white/30"
+                        style={{ backgroundColor: cfg.color || defaultPalette[(slot - 1) % defaultPalette.length] }}
                       />
-                    </label>
-
-                    {/* Media / Icon button */}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (isExpanded) {
-                          setEditingSlot(null);
-                        } else {
-                          setEditingSlot(slot);
-                          setIconSubTab(cfg.iconType === 'image' ? 'image' : 'emoji');
-                        }
-                      }}
-                      className={`w-7 h-7 rounded-lg border flex items-center justify-center shrink-0 transition-all ${
-                        hasImg || hasEmo
-                          ? 'bg-surface2 border-gold-600 hover:scale-105'
-                          : 'bg-surface2/50 border-border text-muted hover:text-white'
-                      }`}
-                      title="Set Emoji or Image"
-                    >
-                      {hasImg ? (
-                        <img src={cfg.iconValue} alt="" className="w-full h-full rounded-lg object-cover" />
-                      ) : hasEmo ? (
-                        <span className="text-sm select-none">{cfg.iconValue}</span>
-                      ) : (
-                        <span className="text-[10px] text-muted">➕</span>
-                      )}
-                    </button>
-
-                    {/* Title */}
-                    <span className="font-display font-bold text-sm text-gold-300">
-                      Face {slot}
+                    )}
+                    <span className={`font-display font-bold text-xs ${isSelected ? 'text-gold-300' : 'text-white'}`}>
+                      {slot}
                     </span>
-
-                    {/* Percentage input */}
-                    <div className="ml-auto flex items-center gap-1 bg-surface2 border border-border rounded px-1.5 py-0.5">
-                      <input 
-                        type="number"
-                        min="0"
-                        max="100"
-                        className="w-8 bg-transparent text-right font-bold text-xs text-white outline-none"
-                        value={currentPercent}
-                        onChange={(e) => handlePercentageChange(slot, parseInt(e.target.value) || 0)}
-                      />
-                      <span className="text-[11px] text-muted">%</span>
-                    </div>
-
-                    {/* Toggle expand */}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (isExpanded) {
-                          setEditingSlot(null);
-                        } else {
-                          setEditingSlot(slot);
-                          setIconSubTab(cfg.iconType === 'image' ? 'image' : 'emoji');
-                        }
-                      }}
-                      className={`p-1 rounded text-xs transition-colors ${
-                        isExpanded ? 'bg-gold-500/20 text-gold-300' : 'text-muted hover:text-white'
-                      }`}
-                      title="Customize piece"
-                    >
-                      🎨
-                    </button>
                   </div>
 
-                  {/* Probability slider */}
-                  <div className="mt-2">
-                    <input 
-                      type="range" 
-                      min="0" max="100" step="1" 
-                      value={currentPercent}
-                      onChange={(e) => handlePercentageChange(slot, parseInt(e.target.value) || 0)}
-                      className="w-full accent-gold-500 cursor-pointer h-1.5"
-                    />
-                  </div>
-
-                  {/* ── Expanded Piece Customizer Drawer ── */}
-                  {isExpanded && (
-                    <div className="mt-3 pt-3 border-t border-border/80 flex flex-col gap-2.5 animate-fade-in bg-surface2/30 -mx-2.5 -mb-2.5 p-2.5 rounded-b-xl">
-                      {/* Color Palette Presets */}
-                      <div className="flex flex-col gap-1">
-                        <span className="text-[10px] font-bold text-muted uppercase">Color Palette:</span>
-                        <div className="flex flex-wrap gap-1">
-                          {PRESET_COLORS.map(c => (
-                            <button
-                              key={c}
-                              type="button"
-                              onClick={() => updateSlotConfig(slot, { color: c })}
-                              className={`w-4 h-4 rounded border transition-transform ${
-                                cfg.color?.toLowerCase() === c.toLowerCase()
-                                  ? 'scale-125 border-white ring-1 ring-gold-400 z-10'
-                                  : 'border-white/20 hover:scale-110'
-                              }`}
-                              style={{ backgroundColor: c }}
-                            />
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Icon Mode Tabs */}
-                      <div className="flex flex-col gap-1.5 border-t border-border/50 pt-2">
-                        <div className="flex items-center justify-between">
-                          <span className="text-[10px] font-bold text-muted uppercase">Piece Icon:</span>
-                          <div className="flex rounded overflow-hidden border border-border text-[10px] font-semibold">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setIconSubTab('emoji');
-                                updateSlotConfig(slot, { iconType: 'emoji' });
-                              }}
-                              className={`px-1.5 py-0.5 ${iconSubTab === 'emoji' ? 'bg-gold-700 text-bg font-bold' : 'bg-surface text-muted'}`}
-                            >
-                              😀 Emoji
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setIconSubTab('image');
-                                updateSlotConfig(slot, { iconType: 'image' });
-                              }}
-                              className={`px-1.5 py-0.5 ${iconSubTab === 'image' ? 'bg-gold-700 text-bg font-bold' : 'bg-surface text-muted'}`}
-                            >
-                              🖼️ Image
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setIconSubTab('none');
-                                updateSlotConfig(slot, { iconType: 'none', iconValue: '' });
-                              }}
-                              className={`px-1.5 py-0.5 ${iconSubTab === 'none' ? 'bg-gold-700 text-bg font-bold' : 'bg-surface text-muted'}`}
-                            >
-                              None
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* Emoji Mode */}
-                        {iconSubTab === 'emoji' && (
-                          <div className="flex flex-col gap-1.5">
-                            <div className="grid grid-cols-8 gap-1 p-1 bg-surface border border-border rounded max-h-24 overflow-y-auto">
-                              {COMMON_EMOJIS.map(em => (
-                                <button
-                                  key={em}
-                                  type="button"
-                                  onClick={() => updateSlotConfig(slot, { iconType: 'emoji', iconValue: em })}
-                                  className={`w-6 h-6 flex items-center justify-center text-xs rounded hover:bg-gold-900/40 hover:scale-110 transition-all ${
-                                    cfg.iconValue === em ? 'bg-gold-900/60 ring-1 ring-gold-400' : ''
-                                  }`}
-                                >
-                                  {em}
-                                </button>
-                              ))}
-                            </div>
-                            <input
-                              type="text"
-                              value={cfg.iconType === 'emoji' ? cfg.iconValue || '' : ''}
-                              onChange={(e) => updateSlotConfig(slot, { iconType: 'emoji', iconValue: e.target.value })}
-                              placeholder="Type emoji (e.g. 🐉)"
-                              className="input text-[11px] py-1 px-2"
-                            />
-                          </div>
-                        )}
-
-                        {/* Image Mode */}
-                        {iconSubTab === 'image' && (
-                          <div className="flex flex-col gap-1.5">
-                            <div className="flex items-center gap-1.5">
-                              <button
-                                type="button"
-                                onClick={() => handleTriggerImageUpload(slot)}
-                                className="btn-gold text-[10px] py-1 px-2 shrink-0"
-                              >
-                                📁 Upload Photo
-                              </button>
-                              <input
-                                type="url"
-                                value={cfg.iconType === 'image' ? cfg.iconValue || '' : ''}
-                                onChange={(e) => updateSlotConfig(slot, { iconType: 'image', iconValue: e.target.value })}
-                                placeholder="Paste image URL..."
-                                className="input flex-1 text-[10px] py-1 px-1.5"
-                              />
-                            </div>
-
-                            {hasImg && (
-                              <div className="flex items-center justify-between p-1 bg-surface border border-border rounded">
-                                <div className="flex items-center gap-1.5">
-                                  <img src={cfg.iconValue} alt="" className="w-6 h-6 rounded object-cover" />
-                                  <span className="text-[10px] text-muted">Image Attached</span>
-                                </div>
-                                <button
-                                  type="button"
-                                  onClick={() => updateSlotConfig(slot, { iconType: 'none', iconValue: '' })}
-                                  className="text-[10px] text-red-400 hover:text-red-300 font-bold"
-                                >
-                                  Remove
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Optional Custom Label */}
-                      <div className="flex flex-col gap-1 border-t border-border/50 pt-1.5">
-                        <span className="text-[10px] font-bold text-muted">Custom Label (Optional):</span>
-                        <input
-                          type="text"
-                          value={cfg.label || ''}
-                          onChange={(e) => updateSlotConfig(slot, { label: e.target.value })}
-                          placeholder={`Default: ${slot}`}
-                          className="input text-[11px] py-0.5 px-2"
-                        />
-                      </div>
-
-                      <div className="flex justify-end pt-1">
-                        <button
-                          type="button"
-                          onClick={() => setEditingSlot(null)}
-                          className="text-[11px] font-bold text-gold-400 hover:text-white px-2 py-0.5 rounded bg-surface border border-border"
-                        >
-                          ✓ Done
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
+                  {/* Bottom row: percentage */}
+                  <span className="text-[10px] text-muted font-mono font-semibold mt-0.5">
+                    {pct}%
+                  </span>
+                </button>
               );
             })}
           </div>
+
+          {/* ── Focused Face Inspector Panel (Clean, Spacious, No Staircase jumping!) ── */}
+          {selectedFace !== null && (() => {
+            const slot = selectedFace;
+            const cfg = slotConfigs[slot] || {};
+            const weight = weights[slot] ?? 1;
+            const pct = Math.round((weight / totalWeight) * 100);
+            const hasImg = cfg.iconType === 'image' && cfg.iconValue;
+            const hasEmo = (cfg.iconType === 'emoji' || !cfg.iconType) && cfg.iconValue;
+            const faceColor = cfg.color || defaultPalette[(slot - 1) % defaultPalette.length];
+
+            const prevSlot = slot > 1 ? slot - 1 : slots[slots.length - 1];
+            const nextSlot = slot < slots.length ? slot + 1 : slots[0];
+
+            return (
+              <div className="mt-2 p-4 rounded-xl bg-surface2/60 border border-gold-800/40 flex flex-col gap-4 animate-fade-in shadow-inner">
+                {/* Inspector Header with Live Preview Badge and Prev/Next Navigation */}
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/70 pb-3">
+                  <div className="flex items-center gap-3.5">
+                    {/* Live Piece Preview Badge */}
+                    <div
+                      className="w-12 h-12 rounded-2xl flex flex-col items-center justify-center shadow-lg border-2 border-white/40 shrink-0 relative overflow-hidden"
+                      style={{ backgroundColor: faceColor }}
+                    >
+                      {hasImg ? (
+                        <img src={cfg.iconValue} alt="" className="w-full h-full object-cover" />
+                      ) : hasEmo ? (
+                        <span className="text-xl select-none drop-shadow">{cfg.iconValue}</span>
+                      ) : null}
+                      <span className="text-[11px] font-black text-white drop-shadow font-display leading-none">
+                        {cfg.label ? cfg.label : slot}
+                      </span>
+                    </div>
+
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h4 className="font-display font-bold text-base text-gold-300">
+                          Editing Face {slot}
+                        </h4>
+                        <span className="text-xs px-2 py-0.5 rounded bg-surface border border-border font-mono font-bold text-white">
+                          Chance: {pct}%
+                        </span>
+                      </div>
+                      <p className="text-xs text-muted">
+                        Customize color, emoji/photo, custom name, and odds for this piece
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Quick Prev / Next Buttons */}
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedFace(prevSlot)}
+                      className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-surface border border-border text-muted hover:text-white transition-colors"
+                    >
+                      ◀ Face {prevSlot}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedFace(nextSlot)}
+                      className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-surface border border-border text-muted hover:text-white transition-colors"
+                    >
+                      Face {nextSlot} ▶
+                    </button>
+                  </div>
+                </div>
+
+                {/* 3 Clean Columns: 1. Color, 2. Media (Emoji/Image), 3. Label & Probability */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
+                  {/* Column 1: Color Picker */}
+                  <div className="flex flex-col gap-2 p-3 rounded-lg bg-surface border border-border">
+                    <span className="text-xs font-bold text-gold-400 uppercase tracking-wider">
+                      🎨 Piece Color
+                    </span>
+
+                    <div className="flex items-center gap-2">
+                      {/* Native Color Picker Swatch */}
+                      <label
+                        className="relative w-8 h-8 rounded-lg border-2 border-white/50 cursor-pointer overflow-hidden shadow shrink-0 hover:scale-105 transition-transform"
+                        style={{ backgroundColor: faceColor }}
+                        title="Click to pick custom color"
+                      >
+                        <input
+                          type="color"
+                          value={faceColor}
+                          onChange={(e) => updateSlotConfig(slot, { color: e.target.value })}
+                          className="opacity-0 absolute inset-0 w-full h-full cursor-pointer"
+                        />
+                      </label>
+
+                      <div className="flex items-center gap-1 flex-1">
+                        <span className="text-xs text-muted font-mono">HEX:</span>
+                        <input
+                          type="text"
+                          value={cfg.color || ''}
+                          onChange={(e) => updateSlotConfig(slot, { color: e.target.value })}
+                          placeholder={defaultPalette[(slot - 1) % defaultPalette.length]}
+                          className="input text-xs font-mono py-1 px-2 flex-1 uppercase"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Quick 16 Palette Swatches */}
+                    <div className="flex flex-wrap gap-1.5 pt-1">
+                      {PRESET_COLORS.map((c) => (
+                        <button
+                          key={c}
+                          type="button"
+                          onClick={() => updateSlotConfig(slot, { color: c })}
+                          className={`w-5 h-5 rounded-md border transition-transform ${
+                            faceColor.toLowerCase() === c.toLowerCase()
+                              ? 'scale-125 border-white ring-2 ring-gold-400 z-10'
+                              : 'border-white/20 hover:scale-110'
+                          }`}
+                          style={{ backgroundColor: c }}
+                          title={c}
+                        />
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Column 2: Media (Emoji / Image) */}
+                  <div className="flex flex-col gap-2 p-3 rounded-lg bg-surface border border-border">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-gold-400 uppercase tracking-wider">
+                        😀 Icon or Photo
+                      </span>
+                      <div className="flex rounded overflow-hidden border border-border text-[11px] font-semibold">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIconSubTab('emoji');
+                            updateSlotConfig(slot, { iconType: 'emoji' });
+                          }}
+                          className={`px-2 py-0.5 ${iconSubTab === 'emoji' ? 'bg-gold-700 text-bg font-bold' : 'bg-surface text-muted'}`}
+                        >
+                          Emoji
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIconSubTab('image');
+                            updateSlotConfig(slot, { iconType: 'image' });
+                          }}
+                          className={`px-2 py-0.5 ${iconSubTab === 'image' ? 'bg-gold-700 text-bg font-bold' : 'bg-surface text-muted'}`}
+                        >
+                          Image
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => updateSlotConfig(slot, { iconType: 'none', iconValue: '' })}
+                          className="px-2 py-0.5 bg-surface text-muted hover:text-white"
+                          title="Remove icon"
+                        >
+                          Clear
+                        </button>
+                      </div>
+                    </div>
+
+                    {iconSubTab === 'emoji' ? (
+                      <div className="flex flex-col gap-2">
+                        <div className="grid grid-cols-8 gap-1 p-1.5 bg-surface2 rounded border border-border max-h-24 overflow-y-auto">
+                          {COMMON_EMOJIS.map((em) => (
+                            <button
+                              key={em}
+                              type="button"
+                              onClick={() => updateSlotConfig(slot, { iconType: 'emoji', iconValue: em })}
+                              className={`w-6 h-6 flex items-center justify-center text-xs rounded hover:bg-gold-900/40 hover:scale-110 transition-all ${
+                                cfg.iconValue === em ? 'bg-gold-900/70 ring-1 ring-gold-400' : ''
+                              }`}
+                            >
+                              {em}
+                            </button>
+                          ))}
+                        </div>
+                        <input
+                          type="text"
+                          value={cfg.iconType === 'emoji' ? cfg.iconValue || '' : ''}
+                          onChange={(e) => updateSlotConfig(slot, { iconType: 'emoji', iconValue: e.target.value })}
+                          placeholder="Type any emoji (e.g. 🐉)"
+                          className="input text-xs py-1"
+                        />
+                      </div>
+                    ) : (
+                      <div className="flex flex-col gap-2">
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => handleTriggerImageUpload(slot)}
+                            className="btn-gold text-xs py-1.5 px-2.5 shrink-0"
+                          >
+                            📁 Upload Photo
+                          </button>
+                          <input
+                            type="url"
+                            value={cfg.iconType === 'image' ? cfg.iconValue || '' : ''}
+                            onChange={(e) => updateSlotConfig(slot, { iconType: 'image', iconValue: e.target.value })}
+                            placeholder="or paste Image URL..."
+                            className="input flex-1 text-xs py-1"
+                          />
+                        </div>
+                        {hasImg && (
+                          <div className="flex items-center justify-between p-1.5 bg-surface2 border border-border rounded">
+                            <div className="flex items-center gap-2">
+                              <img src={cfg.iconValue} alt="" className="w-7 h-7 rounded object-cover border border-white/40" />
+                              <span className="text-xs text-white font-semibold">Active Photo</span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => updateSlotConfig(slot, { iconType: 'none', iconValue: '' })}
+                              className="text-xs text-red-400 hover:text-red-200"
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Column 3: Label & Probability Slider */}
+                  <div className="flex flex-col gap-3 p-3 rounded-lg bg-surface border border-border">
+                    <span className="text-xs font-bold text-gold-400 uppercase tracking-wider">
+                      🏷️ Label & Probability
+                    </span>
+
+                    {/* Custom Label */}
+                    <div className="flex flex-col gap-1">
+                      <span className="text-[11px] text-muted">Custom Label / Skill Name:</span>
+                      <input
+                        type="text"
+                        value={cfg.label || ''}
+                        onChange={(e) => updateSlotConfig(slot, { label: e.target.value })}
+                        placeholder={`Default: ${slot}`}
+                        className="input text-xs py-1"
+                      />
+                    </div>
+
+                    {/* Probability slider & input */}
+                    <div className="flex flex-col gap-1">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-muted">Chance on Wheel:</span>
+                        <div className="flex items-center gap-1 bg-surface2 border border-border rounded px-1.5 py-0.5">
+                          <input
+                            type="number"
+                            min="0"
+                            max="100"
+                            value={pct}
+                            onChange={(e) => handlePercentageChange(slot, parseInt(e.target.value, 10) || 0)}
+                            className="w-10 text-right bg-transparent font-bold text-xs text-white outline-none"
+                          />
+                          <span className="text-muted font-bold">%</span>
+                        </div>
+                      </div>
+                      <input
+                        type="range"
+                        min="0"
+                        max="100"
+                        step="1"
+                        value={pct}
+                        onChange={(e) => handlePercentageChange(slot, parseInt(e.target.value, 10) || 0)}
+                        className="w-full accent-gold-500 cursor-pointer h-2"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
         </div>
       )}
 
