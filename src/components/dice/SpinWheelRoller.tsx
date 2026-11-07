@@ -1,54 +1,153 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+/**
+ * SpinWheelRoller
+ * Dice wheel roller for d1..d100 with advantage/disadvantage.
+ * Fully customizable:
+ * - Custom color per piece (native color picker + hex + presets)
+ * - Custom Image or Emoji per piece (photo upload with auto-resize, image URL, or RPG emoji picker)
+ * - Custom labels per piece (e.g. "Nat 20", "Fumble", "Fireball")
+ * - Probability adjustment sliders
+ * - Result popups with custom media celebration
+ * - Automatic localStorage persistence
+ */
+
+import React, { useState, useEffect, useRef } from 'react';
 import { useAppContext } from '@/context/AppContext';
 import { DiceType, RollResult } from '@/types/dice';
 import { useTranslation } from '@/hooks/useTranslation';
 import { motion, AnimatePresence, useAnimation, useMotionValue, animate } from 'framer-motion';
 import confetti from 'canvas-confetti';
 
-const DICE_TYPES: DiceType[] = ['d1', 'd2', 'd3', 'd4', 'd5', 'd6', 'd7', 'd8', 'd9', 'd10', 'd11', 'd12', 'd13', 'd14', 'd15', 'd16', 'd17', 'd18', 'd19', 'd20', 'd100'];
+const DICE_TYPES: DiceType[] = [
+  'd1', 'd2', 'd3', 'd4', 'd5', 'd6', 'd7', 'd8', 'd9', 'd10',
+  'd11', 'd12', 'd13', 'd14', 'd15', 'd16', 'd17', 'd18', 'd19', 'd20', 'd100'
+];
+
+const PRESET_COLORS = [
+  '#ef4444', // Red
+  '#f97316', // Orange
+  '#f59e0b', // Amber
+  '#eab308', // Gold
+  '#84cc16', // Lime
+  '#10b981', // Emerald
+  '#14b8a6', // Teal
+  '#06b6d4', // Cyan
+  '#3b82f6', // Blue
+  '#6366f1', // Indigo
+  '#8b5cf6', // Purple
+  '#d946ef', // Fuchsia
+  '#ec4899', // Pink
+  '#f43f5e', // Rose
+  '#64748b', // Slate
+  '#18181b', // Dark Obsidian
+];
+
+const COMMON_EMOJIS = [
+  '⚔️', '🗡️', '🏹', '🛡️', '🔥', '❄️', '⚡', '💥', '💀', '🩸',
+  '🧪', '💰', '💎', '👑', '🐉', '🐺', '🦅', '👁️', '🔮', '✨',
+  '🌪️', '🌙', '☀️', '🎯', '🎲', '🧟', '🧙', '👹', '🪵', '🪨',
+  '🍃', '🍖', '🍺', '📜', '⭐', '❤️', '🖤', '🍀', '🕯️', '🪄',
+];
+
+export interface SlotCustomConfig {
+  color?: string;
+  iconType?: 'emoji' | 'image' | 'none';
+  iconValue?: string;
+  label?: string;
+}
 
 const getDiceSides = (type: DiceType) => parseInt(type.substring(1), 10);
 
-const playTick = (ctx: AudioContext) => {
-  const osc = ctx.createOscillator();
-  const gain = ctx.createGain();
-  osc.connect(gain);
-  gain.connect(ctx.destination);
-  osc.type = 'triangle';
-  osc.frequency.setValueAtTime(800, ctx.currentTime);
-  osc.frequency.exponentialRampToValueAtTime(100, ctx.currentTime + 0.05);
-  gain.gain.setValueAtTime(0.1, ctx.currentTime);
-  gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.05);
-  osc.start(ctx.currentTime);
-  osc.stop(ctx.currentTime + 0.05);
-};
+/**
+ * Resizes an uploaded image file down to max 128x128 pixels using an offscreen canvas.
+ * Keeps localStorage footprint minimal (~5-15 KB per image).
+ */
+function resizeImageToDataUrl(file: File, maxSize = 128): Promise<string> {
+  return new Promise((resolve, reject) => {
+    if (!file.type.startsWith('image/')) {
+      reject(new Error('File is not an image'));
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const result = e.target?.result as string;
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+        if (width > height) {
+          if (width > maxSize) {
+            height = Math.round((height * maxSize) / width);
+            width = maxSize;
+          }
+        } else {
+          if (height > maxSize) {
+            width = Math.round((width * maxSize) / height);
+            height = maxSize;
+          }
+        }
+        canvas.width = Math.max(1, width);
+        canvas.height = Math.max(1, height);
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          resolve(result);
+          return;
+        }
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/png', 0.85));
+      };
+      img.onerror = () => resolve(result);
+      img.src = result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
 
-const playWinSound = () => {
-  const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
-  if (!AudioContext) return;
-  const ctx = new AudioContext();
-  
-  const playNote = (freq: number, startTime: number, duration: number) => {
+const playTick = (ctx: AudioContext) => {
+  try {
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     osc.connect(gain);
     gain.connect(ctx.destination);
-    osc.type = 'sine';
-    osc.frequency.value = freq;
-    gain.gain.setValueAtTime(0, startTime);
-    gain.gain.linearRampToValueAtTime(0.3, startTime + 0.05);
-    gain.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
-    osc.start(startTime);
-    osc.stop(startTime + duration);
-  };
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(800, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(100, ctx.currentTime + 0.05);
+    gain.gain.setValueAtTime(0.1, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.05);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.05);
+  } catch {}
+};
 
-  const now = ctx.currentTime;
-  playNote(523.25, now, 0.4);       // C5
-  playNote(659.25, now + 0.1, 0.4); // E5
-  playNote(783.99, now + 0.2, 0.6); // G5
-  playNote(1046.50, now + 0.3, 1.0);// C6
+const playWinSound = () => {
+  try {
+    const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    if (!AudioContextClass) return;
+    const ctx = new AudioContextClass();
+    
+    const playNote = (freq: number, startTime: number, duration: number) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0, startTime);
+      gain.gain.linearRampToValueAtTime(0.3, startTime + 0.05);
+      gain.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
+      osc.start(startTime);
+      osc.stop(startTime + duration);
+    };
+
+    const now = ctx.currentTime;
+    playNote(523.25, now, 0.4);       // C5
+    playNote(659.25, now + 0.1, 0.4); // E5
+    playNote(783.99, now + 0.2, 0.6); // G5
+    playNote(1046.50, now + 0.3, 1.0);// C6
+  } catch {}
 };
 
 interface SpinWheelRollerProps {
@@ -56,52 +155,99 @@ interface SpinWheelRollerProps {
   rollMode?: 'normal' | 'advantage' | 'disadvantage';
 }
 
+interface WheelVisualProps {
+  rotationValue: ReturnType<typeof useMotionValue<number>>;
+  gradientParts: string[];
+  sliceAngles: Array<{ slot: number; weight: number; angle: number; start: number; end: number }>;
+  numSlots: number;
+  arrowControls: ReturnType<typeof useAnimation>;
+  slotConfigs: Record<number, SlotCustomConfig>;
+  size?: number;
+}
+
 function WheelVisual({ 
-  rotationValue, gradientParts, sliceAngles, numSlots, arrowControls, size = 380 
-}: any) {
+  rotationValue, gradientParts, sliceAngles, numSlots, arrowControls, slotConfigs = {}, size = 380 
+}: WheelVisualProps) {
   const scale = size / 380;
   return (
     <div className="relative flex items-center justify-center" style={{ width: size, height: size }}>
-      <div className="absolute inset-0" style={{ transform: `scale(${scale})`, transformOrigin: 'top left', left: '50%', top: '50%', marginLeft: -190 * scale, marginTop: -190 * scale, width: 380, height: 380 }}>
+      <div 
+        className="absolute inset-0" 
+        style={{ 
+          transform: `scale(${scale})`, 
+          transformOrigin: 'top left', 
+          left: '50%', 
+          top: '50%', 
+          marginLeft: -190 * scale, 
+          marginTop: -190 * scale, 
+          width: 380, 
+          height: 380 
+        }}
+      >
+        {/* Top Pointer Arrow */}
         <motion.div 
           animate={arrowControls}
           style={{ transformOrigin: 'top center' }}
-          className="absolute -top-3 left-1/2 -translate-x-1/2 z-20 drop-shadow-[0_4px_6px_rgba(0,0,0,0.6)]"
+          className="absolute -top-3.5 left-1/2 -translate-x-1/2 z-30 drop-shadow-[0_4px_8px_rgba(0,0,0,0.85)]"
         >
-           <div className="w-0 h-0 border-l-[16px] border-l-transparent border-r-[16px] border-r-transparent border-t-[24px] relative" style={{ borderTopColor: 'var(--color-gold-700)' }}>
-             <div className="absolute -top-[24px] -left-[12px] w-0 h-0 border-l-[12px] border-l-transparent border-r-[12px] border-r-transparent border-t-[18px]" style={{ borderTopColor: 'var(--color-surface)' }} />
-           </div>
+          <div className="w-0 h-0 border-l-[16px] border-l-transparent border-r-[16px] border-r-transparent border-t-[24px] relative" style={{ borderTopColor: 'var(--color-gold-600)' }}>
+            <div className="absolute -top-[24px] -left-[12px] w-0 h-0 border-l-[12px] border-l-transparent border-r-[12px] border-r-transparent border-t-[18px]" style={{ borderTopColor: 'var(--color-gold-950)' }} />
+          </div>
         </motion.div>
         
+        {/* Conic Gradient Wheel with custom slice colors and media */}
         <motion.div 
-          className="relative rounded-full border-[6px] border-gold-700 shadow-[0_0_20px_rgba(201,168,76,0.3)] overflow-hidden"
+          className="relative rounded-full border-[6px] border-gold-600 shadow-[0_0_30px_rgba(201,168,76,0.35)] overflow-hidden"
           style={{
-            width: '380px', height: '380px',
+            width: '380px', 
+            height: '380px',
             background: `conic-gradient(${gradientParts.join(', ')})`,
             rotate: rotationValue
           }}
         >
-          <div className="absolute inset-2 rounded-full border border-gold-900/20 z-0 pointer-events-none"></div>
+          <div className="absolute inset-2 rounded-full border border-gold-900/30 z-0 pointer-events-none" />
           
-          {numSlots <= 20 && sliceAngles.map((slice: any, index: number) => {
+          {numSlots <= 24 && sliceAngles.map((slice, index) => {
             if (slice.weight === 0) return null;
             const rotateAngle = slice.start + (slice.angle / 2);
+            const cfg = slotConfigs[slice.slot] || {};
+            const hasImg = cfg.iconType === 'image' && cfg.iconValue;
+            const hasEmo = (cfg.iconType === 'emoji' || !cfg.iconType) && cfg.iconValue;
+            const isNarrow = slice.angle < 17;
+
             return (
               <div
                 key={index}
                 className="absolute top-0 left-0 w-full h-full pointer-events-none"
                 style={{ transform: `rotate(${rotateAngle}deg)` }}
               >
-                <div className="absolute top-3 left-1/2 -translate-x-1/2 font-display font-bold text-gold-400 text-lg drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)] z-10">
-                  {slice.slot}
+                <div className="absolute top-2.5 left-1/2 -translate-x-1/2 flex flex-col items-center justify-center font-display font-bold text-gold-300 drop-shadow-[0_2px_4px_rgba(0,0,0,0.95)] z-10 max-w-[65px] text-center leading-none">
+                  {/* Image or Emoji */}
+                  {hasImg ? (
+                    <img 
+                      src={cfg.iconValue} 
+                      alt="" 
+                      className={`${isNarrow ? 'w-4 h-4' : 'w-6 h-6'} rounded-full object-cover border border-white/80 shadow mb-0.5`}
+                    />
+                  ) : hasEmo ? (
+                    <span className={`${isNarrow ? 'text-xs' : 'text-base'} mb-0.5 select-none drop-shadow`}>
+                      {cfg.iconValue}
+                    </span>
+                  ) : null}
+
+                  {/* Face Number or Label */}
+                  <span className={`${isNarrow ? 'text-xs' : 'text-sm'} font-black tracking-tight text-white drop-shadow`}>
+                    {cfg.label ? cfg.label : slice.slot}
+                  </span>
                 </div>
               </div>
             );
           })}
         </motion.div>
         
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-12 h-12 bg-bg border-[4px] border-gold-700 rounded-full z-20 shadow-inner flex items-center justify-center">
-           <div className="w-4 h-4 bg-gold-400 rounded-full"></div>
+        {/* Center Hub */}
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-14 h-14 bg-surface border-[4px] border-gold-600 rounded-full z-20 shadow-2xl flex items-center justify-center">
+          <div className="w-5 h-5 bg-gold-400 rounded-full shadow-[0_0_10px_rgba(201,168,76,0.8)]" />
         </div>
       </div>
     </div>
@@ -115,6 +261,10 @@ export function SpinWheelRoller({ onResult, rollMode = 'normal' }: SpinWheelRoll
   const [selectedDie, setSelectedDie] = useState<DiceType>('d20');
   const [slots, setSlots] = useState<number[]>([]);
   const [weights, setWeights] = useState<Record<number, number>>({});
+  const [slotConfigs, setSlotConfigs] = useState<Record<number, SlotCustomConfig>>({});
+  const [editingSlot, setEditingSlot] = useState<number | null>(null);
+  const [iconSubTab, setIconSubTab] = useState<'emoji' | 'image' | 'none'>('emoji');
+
   const [isSpinning, setIsSpinning] = useState(false);
   const rotationValue = useMotionValue(0);
   const rotationValue2 = useMotionValue(0);
@@ -122,6 +272,9 @@ export function SpinWheelRoller({ onResult, rollMode = 'normal' }: SpinWheelRoll
   const arrowControls = useAnimation();
   const arrowControls2 = useAnimation();
   
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const targetUploadSlotRef = useRef<number | null>(null);
+
   const [doubleWheelPopup, setDoubleWheelPopup] = useState<{
     result1: number | null;
     result2: number | null;
@@ -129,18 +282,95 @@ export function SpinWheelRoller({ onResult, rollMode = 'normal' }: SpinWheelRoll
     mode: 'advantage' | 'disadvantage';
   } | null>(null);
 
+  // Initialize slots and load saved custom configs for selectedDie
   useEffect(() => {
     const sides = getDiceSides(selectedDie);
     const newSlots = Array.from({ length: sides }, (_, i) => i + 1);
     
     const newWeights: Record<number, number> = {};
-    newSlots.forEach(slot => newWeights[slot] = 1);
+    newSlots.forEach(slot => (newWeights[slot] = 1));
     
     setSlots(newSlots);
     setWeights(newWeights);
     rotationValue.set(0);
     rotationValue2.set(0);
-  }, [selectedDie]);
+    setEditingSlot(null);
+
+    // Restore custom slot configs from localStorage
+    try {
+      const saved = localStorage.getItem(`dnd_dice_wheel_configs_${selectedDie}`);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed === 'object') {
+          setSlotConfigs(parsed);
+          return;
+        }
+      }
+    } catch {}
+
+    // Default configs for d20 (e.g. 20 is Gold with crown/star, 1 is Crimson with skull)
+    if (selectedDie === 'd20') {
+      setSlotConfigs({
+        20: { color: '#eab308', iconType: 'emoji', iconValue: '👑', label: '20' },
+        1:  { color: '#ef4444', iconType: 'emoji', iconValue: '💀', label: '1' },
+      });
+    } else {
+      setSlotConfigs({});
+    }
+  }, [selectedDie]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Save custom slot configs to localStorage automatically
+  useEffect(() => {
+    try {
+      if (Object.keys(slotConfigs).length > 0) {
+        localStorage.setItem(`dnd_dice_wheel_configs_${selectedDie}`, JSON.stringify(slotConfigs));
+      }
+    } catch {}
+  }, [slotConfigs, selectedDie]);
+
+  const updateSlotConfig = (slot: number, patch: Partial<SlotCustomConfig>) => {
+    setSlotConfigs(prev => ({
+      ...prev,
+      [slot]: {
+        ...(prev[slot] || {}),
+        ...patch,
+      },
+    }));
+  };
+
+  const handleResetSlotsConfig = () => {
+    if (confirm(`Reset all custom colors, images, and emojis for ${selectedDie}?`)) {
+      setSlotConfigs({});
+      try {
+        localStorage.removeItem(`dnd_dice_wheel_configs_${selectedDie}`);
+      } catch {}
+    }
+  };
+
+  // Image Upload handler
+  const handleTriggerImageUpload = (slot: number) => {
+    targetUploadSlotRef.current = slot;
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+      fileInputRef.current.click();
+    }
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    const slot = targetUploadSlotRef.current;
+    if (!file || slot === null) return;
+
+    try {
+      const dataUrl = await resizeImageToDataUrl(file, 128);
+      updateSlotConfig(slot, {
+        iconType: 'image',
+        iconValue: dataUrl,
+      });
+    } catch {
+      alert('Unable to load image. Please select a valid PNG, JPG, or WEBP file.');
+    }
+  };
 
   const shuffleSlots = () => {
     if (isSpinning) return;
@@ -152,7 +382,7 @@ export function SpinWheelRoller({ onResult, rollMode = 'normal' }: SpinWheelRoll
   const totalWeight = slots.reduce((sum, slot) => sum + (weights[slot] || 0), 0) || 1; 
   
   const handlePercentageChange = (slot: number, newP: number) => {
-    let p = Math.max(0, Math.min(100, newP)) / 100;
+    const p = Math.max(0, Math.min(100, newP)) / 100;
     
     setWeights(prev => {
       const othersSum = Object.entries(prev)
@@ -162,18 +392,18 @@ export function SpinWheelRoller({ onResult, rollMode = 'normal' }: SpinWheelRoll
       const next = { ...prev };
       
       if (p === 1) {
-        Object.keys(next).forEach(k => next[parseInt(k)] = 0);
+        Object.keys(next).forEach(k => (next[parseInt(k)] = 0));
         next[slot] = 1;
       } else if (p === 0) {
         next[slot] = 0;
         if (othersSum === 0) {
-           Object.keys(next).forEach(k => { if (parseInt(k) !== slot) next[parseInt(k)] = 1; });
+          Object.keys(next).forEach(k => { if (parseInt(k) !== slot) next[parseInt(k)] = 1; });
         }
       } else {
         let S = othersSum;
         if (S === 0) {
-           Object.keys(next).forEach(k => { if (parseInt(k) !== slot) next[parseInt(k)] = 1; });
-           S = Object.keys(next).length - 1;
+          Object.keys(next).forEach(k => { if (parseInt(k) !== slot) next[parseInt(k)] = 1; });
+          S = Object.keys(next).length - 1;
         }
         next[slot] = S * (p / (1 - p));
       }
@@ -196,20 +426,21 @@ export function SpinWheelRoller({ onResult, rollMode = 'normal' }: SpinWheelRoll
     setIsSpinning(true);
     setResultPopup(null);
     
-    const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
-    const ctx = AudioContext ? new AudioContext() : null;
+    const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    const ctx = AudioContextClass ? new AudioContextClass() : null;
 
     if (rollMode === 'advantage' || rollMode === 'disadvantage') {
       setDoubleWheelPopup({ result1: null, result2: null, finalResult: null, mode: rollMode });
       
       const newRotation1 = rotationValue.get() + Math.floor(Math.random() * 360) + (5 * 360);
-      const newRotation2 = rotationValue2.get() + Math.floor(Math.random() * 360) + (7 * 360); // spins longer
+      const newRotation2 = rotationValue2.get() + Math.floor(Math.random() * 360) + (7 * 360);
       
       let lastSliceIndex1 = -1;
       let lastSliceIndex2 = -1;
 
       animate(rotationValue, newRotation1, {
-        duration: 3.5, ease: [0.1, 0.7, 0.1, 1],
+        duration: 3.5, 
+        ease: [0.1, 0.7, 0.1, 1],
         onUpdate: (latest) => {
           const topAngle = (360 - (latest % 360)) % 360;
           const currentSliceIndex = sliceAngles.findIndex(s => topAngle >= s.start && topAngle < s.end);
@@ -222,7 +453,8 @@ export function SpinWheelRoller({ onResult, rollMode = 'normal' }: SpinWheelRoll
       });
 
       animate(rotationValue2, newRotation2, {
-        duration: 4.5, ease: [0.1, 0.7, 0.1, 1],
+        duration: 4.5, 
+        ease: [0.1, 0.7, 0.1, 1],
         onUpdate: (latest) => {
           const topAngle = (360 - (latest % 360)) % 360;
           const currentSliceIndex = sliceAngles.findIndex(s => topAngle >= s.start && topAngle < s.end);
@@ -247,7 +479,9 @@ export function SpinWheelRoller({ onResult, rollMode = 'normal' }: SpinWheelRoll
           setDoubleWheelPopup({ result1, result2, finalResult, mode: rollMode });
           playWinSound();
           confetti({
-            particleCount: 150, spread: 80, origin: { y: 0.6 },
+            particleCount: 150, 
+            spread: 80, 
+            origin: { y: 0.6 },
             colors: ['#c9a84c', '#e8c96a', '#a07830', '#fde68a'],
             zIndex: 1000,
           });
@@ -292,7 +526,6 @@ export function SpinWheelRoller({ onResult, rollMode = 'normal' }: SpinWheelRoll
         const currentSliceIndex = sliceAngles.findIndex(s => topAngle >= s.start && topAngle < s.end);
         
         if (currentSliceIndex !== -1 && lastSliceIndex !== -1 && currentSliceIndex !== lastSliceIndex) {
-          // We crossed a slice boundary!
           if (ctx) playTick(ctx);
           arrowControls.start({
             rotate: [0, -25, 0],
@@ -336,25 +569,36 @@ export function SpinWheelRoller({ onResult, rollMode = 'normal' }: SpinWheelRoll
         addToHistory(label, rollResult);
         
         setResultPopup(result);
-        setTimeout(() => setResultPopup(null), 2500);
+        setTimeout(() => setResultPopup(null), 3000);
       }
     });
   };
 
   const numSlots = slots.length;
-  // Dark theme palette using globals.css variables
-  const colors = ['#0a0a12', '#13131f', '#1a1a2e', '#13131f'];
+  // Default alternating dark fantasy palette
+  const defaultPalette = ['#0a0a14', '#151522', '#1e1c36', '#141426'];
   
+  // Custom piece colors in conic gradient
   const gradientParts = sliceAngles.map((slice, index) => {
     const startPercent = (slice.start / 360) * 100;
     const endPercent = (slice.end / 360) * 100;
-    const color = colors[index % colors.length];
-    return `${color} ${startPercent}% ${endPercent}%`;
+    const cfg = slotConfigs[slice.slot];
+    const color = cfg?.color || defaultPalette[index % defaultPalette.length];
+    return `${color} ${startPercent.toFixed(2)}% ${endPercent.toFixed(2)}%`;
   });
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Dice Tabs */}
+      {/* Hidden File Input for image upload */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        onChange={handleFileChange}
+        className="hidden"
+      />
+
+      {/* Dice Selection Tabs */}
       <div className="flex flex-wrap gap-2 justify-center bg-surface p-2 rounded-xl border border-border">
         {DICE_TYPES.map((type) => (
           <button
@@ -381,24 +625,52 @@ export function SpinWheelRoller({ onResult, rollMode = 'normal' }: SpinWheelRoll
             sliceAngles={sliceAngles}
             numSlots={numSlots}
             arrowControls={arrowControls}
+            slotConfigs={slotConfigs}
           />
           
+          {/* Result Popup with custom color & image/emoji */}
           <AnimatePresence>
-            {resultPopup !== null && (
-              <motion.div
-                initial={{ scale: 0, opacity: 0, y: 50 }}
-                animate={{ scale: 1, opacity: 1, y: 0 }}
-                exit={{ scale: 0, opacity: 0, y: -50 }}
-                transition={{ type: 'spring', bounce: 0.5 }}
-                className="absolute inset-0 flex items-center justify-center z-50 pointer-events-none"
-              >
-                <div className="bg-surface/90 backdrop-blur-sm border-[3px] border-gold-400 rounded-full w-40 h-40 flex items-center justify-center shadow-[0_0_50px_rgba(201,168,76,0.8)]">
-                  <span className="text-6xl font-display font-bold text-gold-300 drop-shadow-[0_0_15px_rgba(253,230,138,1)]">
-                    {resultPopup}
-                  </span>
-                </div>
-              </motion.div>
-            )}
+            {resultPopup !== null && (() => {
+              const cfg = slotConfigs[resultPopup] || {};
+              const hasImg = cfg.iconType === 'image' && cfg.iconValue;
+              const hasEmo = (cfg.iconType === 'emoji' || !cfg.iconType) && cfg.iconValue;
+              const badgeColor = cfg.color || '#c9a84c';
+
+              return (
+                <motion.div
+                  initial={{ scale: 0, opacity: 0, y: 50 }}
+                  animate={{ scale: 1, opacity: 1, y: 0 }}
+                  exit={{ scale: 0, opacity: 0, y: -50 }}
+                  transition={{ type: 'spring', bounce: 0.5 }}
+                  className="absolute inset-0 flex items-center justify-center z-50 pointer-events-none"
+                >
+                  <div 
+                    className="bg-surface/95 backdrop-blur-md border-[4px] rounded-3xl p-6 min-w-[180px] max-w-[260px] flex flex-col items-center justify-center shadow-[0_0_60px_rgba(201,168,76,0.8)] gap-2 animate-popup-appear"
+                    style={{ borderColor: badgeColor }}
+                  >
+                    {hasImg ? (
+                      <img 
+                        src={cfg.iconValue} 
+                        alt="" 
+                        className="w-16 h-16 rounded-2xl object-cover border-2 border-white/80 shadow-lg" 
+                      />
+                    ) : hasEmo ? (
+                      <span className="text-4xl drop-shadow select-none">{cfg.iconValue}</span>
+                    ) : null}
+
+                    <span className="text-5xl font-display font-black text-white drop-shadow-[0_0_15px_rgba(253,230,138,1)]">
+                      {resultPopup}
+                    </span>
+
+                    {cfg.label && (
+                      <span className="text-xs font-bold text-gold-300 truncate max-w-[180px]">
+                        {cfg.label}
+                      </span>
+                    )}
+                  </div>
+                </motion.div>
+              );
+            })()}
           </AnimatePresence>
         </div>
 
@@ -430,38 +702,289 @@ export function SpinWheelRoller({ onResult, rollMode = 'normal' }: SpinWheelRoll
         </div>
       </div>
       
-      {/* Adjuster UI */}
-      {numSlots <= 20 && (
-        <div className="w-full mt-2">
-          <h3 className="text-sm font-bold text-gold-500 mb-4 flex items-center gap-2">
-            ⚙️ Adjust Probabilities
-          </h3>
-          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-4 p-4 bg-surface border border-border rounded-xl">
+      {/* ── Fully Customizable Pieces Panel ── */}
+      {numSlots <= 24 && (
+        <div className="w-full mt-4 flex flex-col gap-3">
+          <div className="flex items-center justify-between border-b border-border/80 pb-2">
+            <div>
+              <h3 className="text-sm font-bold text-gold-400 flex items-center gap-2">
+                <span>🎨</span>
+                <span>Customize Pieces (Color, Image, Emoji & Probabilities)</span>
+              </h3>
+              <p className="text-xs text-muted">
+                Assign custom piece colors, upload photos or pick emojis for each face of {selectedDie}.
+              </p>
+            </div>
+            
+            <button
+              type="button"
+              onClick={handleResetSlotsConfig}
+              className="text-xs text-muted hover:text-red-400 border border-border px-2 py-1 rounded transition-colors"
+              title="Reset all customized colors and icons"
+            >
+              ↺ Reset Pieces
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             {slots.map(slot => {
               const currentPercent = Math.round((((weights[slot] ?? 1) / totalWeight) * 100));
+              const cfg = slotConfigs[slot] || {};
+              const isExpanded = editingSlot === slot;
+              const hasImg = cfg.iconType === 'image' && cfg.iconValue;
+              const hasEmo = (cfg.iconType === 'emoji' || !cfg.iconType) && cfg.iconValue;
+
               return (
-                <div key={slot} className="flex flex-col gap-1">
-                  <label className="text-xs text-muted flex justify-between items-center mb-1">
-                    <span>Face {slot}</span>
-                    <div className="flex items-center gap-1">
+                <div 
+                  key={slot} 
+                  className={`flex flex-col rounded-xl border p-2.5 transition-all ${
+                    isExpanded 
+                      ? 'bg-surface border-gold-500 shadow-lg' 
+                      : 'bg-surface/70 border-border hover:border-gold-700/60'
+                  }`}
+                >
+                  {/* Card Header: Color picker, icon button, face number, percentage */}
+                  <div className="flex items-center gap-2">
+                    {/* Color Swatch / Native Color Picker */}
+                    <label 
+                      className="relative w-7 h-7 rounded-lg border-2 border-white/40 cursor-pointer overflow-hidden shadow shrink-0 hover:scale-105 transition-transform"
+                      style={{ backgroundColor: cfg.color || '#1e1c36' }}
+                      title="Click to pick piece color"
+                    >
+                      <input
+                        type="color"
+                        value={cfg.color || '#1e1c36'}
+                        onChange={(e) => updateSlotConfig(slot, { color: e.target.value })}
+                        className="opacity-0 absolute inset-0 w-full h-full cursor-pointer"
+                      />
+                    </label>
+
+                    {/* Media / Icon button */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (isExpanded) {
+                          setEditingSlot(null);
+                        } else {
+                          setEditingSlot(slot);
+                          setIconSubTab(cfg.iconType === 'image' ? 'image' : 'emoji');
+                        }
+                      }}
+                      className={`w-7 h-7 rounded-lg border flex items-center justify-center shrink-0 transition-all ${
+                        hasImg || hasEmo
+                          ? 'bg-surface2 border-gold-600 hover:scale-105'
+                          : 'bg-surface2/50 border-border text-muted hover:text-white'
+                      }`}
+                      title="Set Emoji or Image"
+                    >
+                      {hasImg ? (
+                        <img src={cfg.iconValue} alt="" className="w-full h-full rounded-lg object-cover" />
+                      ) : hasEmo ? (
+                        <span className="text-sm select-none">{cfg.iconValue}</span>
+                      ) : (
+                        <span className="text-[10px] text-muted">➕</span>
+                      )}
+                    </button>
+
+                    {/* Title */}
+                    <span className="font-display font-bold text-sm text-gold-300">
+                      Face {slot}
+                    </span>
+
+                    {/* Percentage input */}
+                    <div className="ml-auto flex items-center gap-1 bg-surface2 border border-border rounded px-1.5 py-0.5">
                       <input 
                         type="number"
                         min="0"
                         max="100"
-                        className="w-12 bg-bg border border-border rounded px-1 text-right text-gold-400 outline-none focus:border-gold-500"
+                        className="w-8 bg-transparent text-right font-bold text-xs text-white outline-none"
                         value={currentPercent}
                         onChange={(e) => handlePercentageChange(slot, parseInt(e.target.value) || 0)}
                       />
-                      <span>%</span>
+                      <span className="text-[11px] text-muted">%</span>
                     </div>
-                  </label>
-                  <input 
-                    type="range" 
-                    min="0" max="100" step="1" 
-                    value={currentPercent}
-                    onChange={(e) => handlePercentageChange(slot, parseInt(e.target.value) || 0)}
-                    className="accent-gold-500 cursor-pointer"
-                  />
+
+                    {/* Toggle expand */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (isExpanded) {
+                          setEditingSlot(null);
+                        } else {
+                          setEditingSlot(slot);
+                          setIconSubTab(cfg.iconType === 'image' ? 'image' : 'emoji');
+                        }
+                      }}
+                      className={`p-1 rounded text-xs transition-colors ${
+                        isExpanded ? 'bg-gold-500/20 text-gold-300' : 'text-muted hover:text-white'
+                      }`}
+                      title="Customize piece"
+                    >
+                      🎨
+                    </button>
+                  </div>
+
+                  {/* Probability slider */}
+                  <div className="mt-2">
+                    <input 
+                      type="range" 
+                      min="0" max="100" step="1" 
+                      value={currentPercent}
+                      onChange={(e) => handlePercentageChange(slot, parseInt(e.target.value) || 0)}
+                      className="w-full accent-gold-500 cursor-pointer h-1.5"
+                    />
+                  </div>
+
+                  {/* ── Expanded Piece Customizer Drawer ── */}
+                  {isExpanded && (
+                    <div className="mt-3 pt-3 border-t border-border/80 flex flex-col gap-2.5 animate-fade-in bg-surface2/30 -mx-2.5 -mb-2.5 p-2.5 rounded-b-xl">
+                      {/* Color Palette Presets */}
+                      <div className="flex flex-col gap-1">
+                        <span className="text-[10px] font-bold text-muted uppercase">Color Palette:</span>
+                        <div className="flex flex-wrap gap-1">
+                          {PRESET_COLORS.map(c => (
+                            <button
+                              key={c}
+                              type="button"
+                              onClick={() => updateSlotConfig(slot, { color: c })}
+                              className={`w-4 h-4 rounded border transition-transform ${
+                                cfg.color?.toLowerCase() === c.toLowerCase()
+                                  ? 'scale-125 border-white ring-1 ring-gold-400 z-10'
+                                  : 'border-white/20 hover:scale-110'
+                              }`}
+                              style={{ backgroundColor: c }}
+                            />
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Icon Mode Tabs */}
+                      <div className="flex flex-col gap-1.5 border-t border-border/50 pt-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-bold text-muted uppercase">Piece Icon:</span>
+                          <div className="flex rounded overflow-hidden border border-border text-[10px] font-semibold">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setIconSubTab('emoji');
+                                updateSlotConfig(slot, { iconType: 'emoji' });
+                              }}
+                              className={`px-1.5 py-0.5 ${iconSubTab === 'emoji' ? 'bg-gold-700 text-bg font-bold' : 'bg-surface text-muted'}`}
+                            >
+                              😀 Emoji
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setIconSubTab('image');
+                                updateSlotConfig(slot, { iconType: 'image' });
+                              }}
+                              className={`px-1.5 py-0.5 ${iconSubTab === 'image' ? 'bg-gold-700 text-bg font-bold' : 'bg-surface text-muted'}`}
+                            >
+                              🖼️ Image
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setIconSubTab('none');
+                                updateSlotConfig(slot, { iconType: 'none', iconValue: '' });
+                              }}
+                              className={`px-1.5 py-0.5 ${iconSubTab === 'none' ? 'bg-gold-700 text-bg font-bold' : 'bg-surface text-muted'}`}
+                            >
+                              None
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Emoji Mode */}
+                        {iconSubTab === 'emoji' && (
+                          <div className="flex flex-col gap-1.5">
+                            <div className="grid grid-cols-8 gap-1 p-1 bg-surface border border-border rounded max-h-24 overflow-y-auto">
+                              {COMMON_EMOJIS.map(em => (
+                                <button
+                                  key={em}
+                                  type="button"
+                                  onClick={() => updateSlotConfig(slot, { iconType: 'emoji', iconValue: em })}
+                                  className={`w-6 h-6 flex items-center justify-center text-xs rounded hover:bg-gold-900/40 hover:scale-110 transition-all ${
+                                    cfg.iconValue === em ? 'bg-gold-900/60 ring-1 ring-gold-400' : ''
+                                  }`}
+                                >
+                                  {em}
+                                </button>
+                              ))}
+                            </div>
+                            <input
+                              type="text"
+                              value={cfg.iconType === 'emoji' ? cfg.iconValue || '' : ''}
+                              onChange={(e) => updateSlotConfig(slot, { iconType: 'emoji', iconValue: e.target.value })}
+                              placeholder="Type emoji (e.g. 🐉)"
+                              className="input text-[11px] py-1 px-2"
+                            />
+                          </div>
+                        )}
+
+                        {/* Image Mode */}
+                        {iconSubTab === 'image' && (
+                          <div className="flex flex-col gap-1.5">
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => handleTriggerImageUpload(slot)}
+                                className="btn-gold text-[10px] py-1 px-2 shrink-0"
+                              >
+                                📁 Upload Photo
+                              </button>
+                              <input
+                                type="url"
+                                value={cfg.iconType === 'image' ? cfg.iconValue || '' : ''}
+                                onChange={(e) => updateSlotConfig(slot, { iconType: 'image', iconValue: e.target.value })}
+                                placeholder="Paste image URL..."
+                                className="input flex-1 text-[10px] py-1 px-1.5"
+                              />
+                            </div>
+
+                            {hasImg && (
+                              <div className="flex items-center justify-between p-1 bg-surface border border-border rounded">
+                                <div className="flex items-center gap-1.5">
+                                  <img src={cfg.iconValue} alt="" className="w-6 h-6 rounded object-cover" />
+                                  <span className="text-[10px] text-muted">Image Attached</span>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => updateSlotConfig(slot, { iconType: 'none', iconValue: '' })}
+                                  className="text-[10px] text-red-400 hover:text-red-300 font-bold"
+                                >
+                                  Remove
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Optional Custom Label */}
+                      <div className="flex flex-col gap-1 border-t border-border/50 pt-1.5">
+                        <span className="text-[10px] font-bold text-muted">Custom Label (Optional):</span>
+                        <input
+                          type="text"
+                          value={cfg.label || ''}
+                          onChange={(e) => updateSlotConfig(slot, { label: e.target.value })}
+                          placeholder={`Default: ${slot}`}
+                          className="input text-[11px] py-0.5 px-2"
+                        />
+                      </div>
+
+                      <div className="flex justify-end pt-1">
+                        <button
+                          type="button"
+                          onClick={() => setEditingSlot(null)}
+                          className="text-[11px] font-bold text-gold-400 hover:text-white px-2 py-0.5 rounded bg-surface border border-border"
+                        >
+                          ✓ Done
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -469,7 +992,7 @@ export function SpinWheelRoller({ onResult, rollMode = 'normal' }: SpinWheelRoll
         </div>
       )}
 
-      {/* Double Wheel Popup Overlay */}
+      {/* Double Wheel Popup Overlay for Advantage / Disadvantage */}
       <AnimatePresence>
         {doubleWheelPopup !== null && (
           <motion.div
@@ -491,6 +1014,7 @@ export function SpinWheelRoller({ onResult, rollMode = 'normal' }: SpinWheelRoll
                   sliceAngles={sliceAngles}
                   numSlots={numSlots}
                   arrowControls={arrowControls}
+                  slotConfigs={slotConfigs}
                   size={300}
                 />
               </div>
@@ -501,6 +1025,7 @@ export function SpinWheelRoller({ onResult, rollMode = 'normal' }: SpinWheelRoll
                   sliceAngles={sliceAngles}
                   numSlots={numSlots}
                   arrowControls={arrowControls2}
+                  slotConfigs={slotConfigs}
                   size={300}
                 />
               </div>
