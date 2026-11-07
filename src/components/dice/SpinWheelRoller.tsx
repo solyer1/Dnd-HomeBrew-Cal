@@ -7,14 +7,17 @@
  * - User/Character Presets: Save, switch, duplicate, and delete custom wheels per player/character
  * - Clean Face Chips Selector + Dedicated Focused Inspector (no messy expanding grid)
  * - Custom colors per face (native color picker + hex input + 16 preset palette swatches)
- * - Custom Images or Emojis per face (auto-resized local upload, image URL, 40+ RPG emoji picker)
+ * - Custom Images or Emojis per face:
+ *     * Full GIF support (animated GIFs preserved without canvas flattening)
+ *     * Choice between "Icon (Like Emoji)" and "Cover Entire Face" (fills the whole pie wedge)
+ *     * Cinematic background flash when rolling to an image/GIF with customizable duration
  * - Custom labels & probability sliders per piece
  * - Live Piece Preview badge with immediate visual feedback on the wheel
  * - Result popups with custom media celebration & confetti
  * - Full localStorage persistence
  */
 
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useId } from 'react';
 import { useAppContext } from '@/context/AppContext';
 import { DiceType, RollResult } from '@/types/dice';
 import { useTranslation } from '@/hooks/useTranslation';
@@ -57,6 +60,8 @@ export interface SlotCustomConfig {
   color?: string;
   iconType?: 'emoji' | 'image' | 'none';
   iconValue?: string;
+  imageFit?: 'icon' | 'cover'; // 'icon' = circular badge, 'cover' = fill entire face wedge
+  flashDuration?: number; // duration in seconds (default 3s)
   label?: string;
 }
 
@@ -109,15 +114,42 @@ const DEFAULT_PRESETS: WheelUserPreset[] = [
 ];
 
 /**
- * Resizes an uploaded image file down to max 128x128 pixels using an offscreen canvas.
- * Keeps localStorage footprint minimal (~5-15 KB per image).
+ * Calculates the SVG pie wedge path for a slice between startDeg and endDeg.
+ * Coordinates match conic-gradient: 0 deg at top (12 o'clock), increasing clockwise.
  */
-function resizeImageToDataUrl(file: File, maxSize = 128): Promise<string> {
+function getWedgePath(startDeg: number, endDeg: number, cx = 190, cy = 190, r = 190): string {
+  const rad1 = (startDeg * Math.PI) / 180;
+  const rad2 = (endDeg * Math.PI) / 180;
+  const x1 = cx + r * Math.sin(rad1);
+  const y1 = cy - r * Math.cos(rad1);
+  const x2 = cx + r * Math.sin(rad2);
+  const y2 = cy - r * Math.cos(rad2);
+  const diff = endDeg - startDeg;
+  const largeArcFlag = diff > 180 ? 1 : 0;
+  return `M ${cx} ${cy} L ${x1.toFixed(2)} ${y1.toFixed(2)} A ${r} ${r} 0 ${largeArcFlag} 1 ${x2.toFixed(2)} ${y2.toFixed(2)} Z`;
+}
+
+/**
+ * Loads and reads an image/GIF.
+ * If GIF: reads directly without canvas to preserve all animation frames!
+ * If PNG/JPG: resizes to max 192px using canvas to keep localStorage light.
+ */
+function resizeImageToDataUrl(file: File, maxSize = 192): Promise<string> {
   return new Promise((resolve, reject) => {
+    // Preserve animated GIF without flattening to canvas
+    if (file.type === 'image/gif') {
+      const reader = new FileReader();
+      reader.onload = (e) => resolve(e.target?.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+      return;
+    }
+
     if (!file.type.startsWith('image/')) {
       reject(new Error('File is not an image'));
       return;
     }
+
     const reader = new FileReader();
     reader.onload = (e) => {
       const result = e.target?.result as string;
@@ -212,10 +244,11 @@ interface WheelVisualProps {
   arrowControls: ReturnType<typeof useAnimation>;
   slotConfigs: Record<number, SlotCustomConfig>;
   size?: number;
+  idPrefix?: string;
 }
 
 function WheelVisual({ 
-  rotationValue, gradientParts, sliceAngles, numSlots, arrowControls, slotConfigs = {}, size = 380 
+  rotationValue, gradientParts, sliceAngles, numSlots, arrowControls, slotConfigs = {}, size = 380, idPrefix = 'w' 
 }: WheelVisualProps) {
   const scale = size / 380;
   return (
@@ -254,13 +287,52 @@ function WheelVisual({
             rotate: rotationValue
           }}
         >
+          {/* SVG layer for wedges with imageFit === 'cover' (supports animated GIF & PNG) */}
+          <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 380 380">
+            <defs>
+              {sliceAngles.map((slice) => {
+                const cfg = slotConfigs[slice.slot] || {};
+                if (cfg.iconType !== 'image' || !cfg.iconValue || cfg.imageFit !== 'cover') return null;
+                return (
+                  <clipPath key={`clip-${slice.slot}`} id={`${idPrefix}-clip-wedge-${slice.slot}`}>
+                    <path d={getWedgePath(slice.start, slice.end)} />
+                  </clipPath>
+                );
+              })}
+            </defs>
+
+            {sliceAngles.map((slice) => {
+              const cfg = slotConfigs[slice.slot] || {};
+              if (cfg.iconType !== 'image' || !cfg.iconValue || cfg.imageFit !== 'cover') return null;
+              return (
+                <g key={`cover-${slice.slot}`} clipPath={`url(#${idPrefix}-clip-wedge-${slice.slot})`}>
+                  <image
+                    href={cfg.iconValue}
+                    x="0"
+                    y="0"
+                    width="380"
+                    height="380"
+                    preserveAspectRatio="xMidYMid slice"
+                  />
+                  {/* Subtle dark shade over the image so numerals pop */}
+                  <path
+                    d={getWedgePath(slice.start, slice.end)}
+                    fill="#000"
+                    fillOpacity="0.25"
+                  />
+                </g>
+              );
+            })}
+          </svg>
+
           <div className="absolute inset-2 rounded-full border border-gold-900/30 z-0 pointer-events-none" />
           
           {numSlots <= 24 && sliceAngles.map((slice, index) => {
             if (slice.weight === 0) return null;
             const rotateAngle = slice.start + (slice.angle / 2);
             const cfg = slotConfigs[slice.slot] || {};
-            const hasImg = cfg.iconType === 'image' && cfg.iconValue;
+            const isCover = cfg.iconType === 'image' && cfg.iconValue && cfg.imageFit === 'cover';
+            const hasImg = cfg.iconType === 'image' && cfg.iconValue && !isCover;
             const hasEmo = (cfg.iconType === 'emoji' || !cfg.iconType) && cfg.iconValue;
             const isNarrow = slice.angle < 17;
 
@@ -271,7 +343,7 @@ function WheelVisual({
                 style={{ transform: `rotate(${rotateAngle}deg)` }}
               >
                 <div className="absolute top-2.5 left-1/2 -translate-x-1/2 flex flex-col items-center justify-center font-display font-bold text-gold-300 drop-shadow-[0_2px_4px_rgba(0,0,0,0.95)] z-10 max-w-[65px] text-center leading-none">
-                  {/* Image or Emoji */}
+                  {/* If 'icon' mode, render circular avatar */}
                   {hasImg ? (
                     <img 
                       src={cfg.iconValue} 
@@ -285,7 +357,7 @@ function WheelVisual({
                   ) : null}
 
                   {/* Face Number or Label */}
-                  <span className={`${isNarrow ? 'text-xs' : 'text-sm'} font-black tracking-tight text-white drop-shadow`}>
+                  <span className={`${isNarrow ? 'text-xs' : 'text-sm'} font-black tracking-tight text-white drop-shadow-[0_2px_4px_rgba(0,0,0,1)] ${isCover ? 'bg-black/60 px-1.5 py-0.5 rounded shadow' : ''}`}>
                     {cfg.label ? cfg.label : slice.slot}
                   </span>
                 </div>
@@ -306,6 +378,7 @@ function WheelVisual({
 export function SpinWheelRoller({ onResult, rollMode = 'normal' }: SpinWheelRollerProps) {
   const { addToHistory } = useAppContext();
   const { t } = useTranslation();
+  const wheelUniqueId = useId();
   
   const [selectedDie, setSelectedDie] = useState<DiceType>('d20');
   
@@ -324,6 +397,15 @@ export function SpinWheelRoller({ onResult, rollMode = 'normal' }: SpinWheelRoll
   const arrowControls = useAnimation();
   const arrowControls2 = useAnimation();
   
+  // Full-Screen Cinematic Background Flash State
+  const [flashState, setFlashState] = useState<{
+    imageSrc: string;
+    label: string;
+    slot: number;
+    duration: number;
+  } | null>(null);
+  const flashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const targetUploadSlotRef = useRef<number | null>(null);
 
@@ -354,6 +436,13 @@ export function SpinWheelRoller({ onResult, rollMode = 'normal' }: SpinWheelRoll
       localStorage.setItem('dnd_dice_wheel_presets_v2', JSON.stringify(presets));
     } catch {}
   }, [presets]);
+
+  // Clean up flash timer on unmount
+  useEffect(() => {
+    return () => {
+      if (flashTimerRef.current) clearTimeout(flashTimerRef.current);
+    };
+  }, []);
 
   // Current active preset
   const currentPreset = useMemo(() => {
@@ -399,6 +488,7 @@ export function SpinWheelRoller({ onResult, rollMode = 'normal' }: SpinWheelRoll
       id: generateId(),
       name: newName.trim(),
       diceType: selectedDie,
+      slotOrder: [...slots],
       weights: Object.fromEntries(slots.map((s) => [s, 1])),
       slotConfigs: {
         [slots[slots.length - 1]]: { color: '#eab308', iconType: 'emoji', iconValue: '👑', label: `${slots[slots.length - 1]}` },
@@ -456,7 +546,7 @@ export function SpinWheelRoller({ onResult, rollMode = 'normal' }: SpinWheelRoll
     }
   };
 
-  // Image Upload handler
+  // Image / GIF Upload handler
   const handleTriggerImageUpload = (slot: number) => {
     targetUploadSlotRef.current = slot;
     if (fileInputRef.current) {
@@ -471,13 +561,13 @@ export function SpinWheelRoller({ onResult, rollMode = 'normal' }: SpinWheelRoll
     if (!file || slot === null) return;
 
     try {
-      const dataUrl = await resizeImageToDataUrl(file, 128);
+      const dataUrl = await resizeImageToDataUrl(file, 192);
       updateSlotConfig(slot, {
         iconType: 'image',
         iconValue: dataUrl,
       });
     } catch {
-      alert('Unable to load image. Please select a valid PNG, JPG, or WEBP file.');
+      alert('Unable to load image. Please select a valid PNG, JPG, GIF, or WEBP file.');
     }
   };
 
@@ -561,6 +651,8 @@ export function SpinWheelRoller({ onResult, rollMode = 'normal' }: SpinWheelRoll
     if (isSpinning) return;
     setIsSpinning(true);
     setResultPopup(null);
+    setFlashState(null);
+    if (flashTimerRef.current) clearTimeout(flashTimerRef.current);
     
     const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
     const ctx = AudioContextClass ? new AudioContextClass() : null;
@@ -621,6 +713,22 @@ export function SpinWheelRoller({ onResult, rollMode = 'normal' }: SpinWheelRoll
             colors: ['#c9a84c', '#e8c96a', '#a07830', '#fde68a'],
             zIndex: 1000,
           });
+
+          // Trigger Background Flash if the winning face has an image/GIF
+          const winningCfg = slotConfigs[finalResult] || {};
+          if (winningCfg.iconType === 'image' && winningCfg.iconValue) {
+            const dur = winningCfg.flashDuration || 3;
+            setFlashState({
+              imageSrc: winningCfg.iconValue,
+              label: winningCfg.label || `Face ${finalResult}`,
+              slot: finalResult,
+              duration: dur,
+            });
+            if (flashTimerRef.current) clearTimeout(flashTimerRef.current);
+            flashTimerRef.current = setTimeout(() => {
+              setFlashState(null);
+            }, dur * 1000);
+          }
 
           const rollResult: RollResult = {
             groups: [{
@@ -689,6 +797,22 @@ export function SpinWheelRoller({ onResult, rollMode = 'normal' }: SpinWheelRoll
           colors: ['#c9a84c', '#e8c96a', '#a07830', '#fde68a']
         });
         
+        // Trigger Background Flash if the winning face has an image/GIF
+        const winningCfg = slotConfigs[result] || {};
+        if (winningCfg.iconType === 'image' && winningCfg.iconValue) {
+          const dur = winningCfg.flashDuration || 3;
+          setFlashState({
+            imageSrc: winningCfg.iconValue,
+            label: winningCfg.label || `Face ${result}`,
+            slot: result,
+            duration: dur,
+          });
+          if (flashTimerRef.current) clearTimeout(flashTimerRef.current);
+          flashTimerRef.current = setTimeout(() => {
+            setFlashState(null);
+          }, dur * 1000);
+        }
+
         const rollResult: RollResult = {
           groups: [{
             group: { id: `spin-${Date.now()}`, diceType: selectedDie, quantity: 1, modifier: 0, modifierMode: 'total', label: '' },
@@ -725,11 +849,11 @@ export function SpinWheelRoller({ onResult, rollMode = 'normal' }: SpinWheelRoll
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Hidden File Input for image upload */}
+      {/* Hidden File Input for image / GIF upload */}
       <input
         ref={fileInputRef}
         type="file"
-        accept="image/*"
+        accept="image/png, image/jpeg, image/gif, image/webp, image/*"
         onChange={handleFileChange}
         className="hidden"
       />
@@ -830,6 +954,7 @@ export function SpinWheelRoller({ onResult, rollMode = 'normal' }: SpinWheelRoll
             numSlots={numSlots}
             arrowControls={arrowControls}
             slotConfigs={slotConfigs}
+            idPrefix={wheelUniqueId}
           />
           
           {/* Result Popup with custom color & image/emoji */}
@@ -1006,7 +1131,7 @@ export function SpinWheelRoller({ onResult, rollMode = 'normal' }: SpinWheelRoll
             })}
           </div>
 
-          {/* ── Focused Face Inspector Panel (Clean, Spacious, No Staircase jumping!) ── */}
+          {/* ── Focused Face Inspector Panel ── */}
           {selectedFace !== null && (() => {
             const slot = selectedFace;
             const cfg = slotConfigs[slot] || {};
@@ -1049,7 +1174,7 @@ export function SpinWheelRoller({ onResult, rollMode = 'normal' }: SpinWheelRoll
                         </span>
                       </div>
                       <p className="text-xs text-muted">
-                        Customize color, emoji/photo, custom name, and odds for this piece
+                        Customize appearance, GIF/photo cover style, flash duration, and odds
                       </p>
                     </div>
                   </div>
@@ -1073,7 +1198,7 @@ export function SpinWheelRoller({ onResult, rollMode = 'normal' }: SpinWheelRoll
                   </div>
                 </div>
 
-                {/* 3 Clean Columns: 1. Color, 2. Media (Emoji/Image), 3. Label & Probability */}
+                {/* 3 Clean Columns: 1. Color, 2. Media (Emoji/Image/GIF), 3. Label & Probability */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
                   {/* Column 1: Color Picker */}
                   <div className="flex flex-col gap-2 p-3 rounded-lg bg-surface border border-border">
@@ -1127,11 +1252,11 @@ export function SpinWheelRoller({ onResult, rollMode = 'normal' }: SpinWheelRoll
                     </div>
                   </div>
 
-                  {/* Column 2: Media (Emoji / Image) */}
-                  <div className="flex flex-col gap-2 p-3 rounded-lg bg-surface border border-border">
+                  {/* Column 2: Media (Emoji / Image / Animated GIF) */}
+                  <div className="flex flex-col gap-2.5 p-3 rounded-lg bg-surface border border-border">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-bold text-gold-400 uppercase tracking-wider">
-                        😀 Icon or Photo
+                        🖼️ Photo, GIF & Emoji
                       </span>
                       <div className="flex rounded overflow-hidden border border-border text-[11px] font-semibold">
                         <button
@@ -1152,7 +1277,7 @@ export function SpinWheelRoller({ onResult, rollMode = 'normal' }: SpinWheelRoll
                           }}
                           className={`px-2 py-0.5 ${iconSubTab === 'image' ? 'bg-gold-700 text-bg font-bold' : 'bg-surface text-muted'}`}
                         >
-                          Image
+                          Image / GIF
                         </button>
                         <button
                           type="button"
@@ -1190,36 +1315,99 @@ export function SpinWheelRoller({ onResult, rollMode = 'normal' }: SpinWheelRoll
                         />
                       </div>
                     ) : (
-                      <div className="flex flex-col gap-2">
+                      <div className="flex flex-col gap-2.5">
                         <div className="flex items-center gap-1.5">
                           <button
                             type="button"
                             onClick={() => handleTriggerImageUpload(slot)}
-                            className="btn-gold text-xs py-1.5 px-2.5 shrink-0"
+                            className="btn-gold text-xs py-1.5 px-2.5 shrink-0 font-bold"
                           >
-                            📁 Upload Photo
+                            📁 Upload Photo / GIF
                           </button>
                           <input
                             type="url"
                             value={cfg.iconType === 'image' ? cfg.iconValue || '' : ''}
                             onChange={(e) => updateSlotConfig(slot, { iconType: 'image', iconValue: e.target.value })}
-                            placeholder="or paste Image URL..."
+                            placeholder="or paste Image/GIF URL..."
                             className="input flex-1 text-xs py-1"
                           />
                         </div>
+
+                        {/* Image Fit & Flash Settings (when image is present) */}
                         {hasImg && (
-                          <div className="flex items-center justify-between p-1.5 bg-surface2 border border-border rounded">
-                            <div className="flex items-center gap-2">
-                              <img src={cfg.iconValue} alt="" className="w-7 h-7 rounded object-cover border border-white/40" />
-                              <span className="text-xs text-white font-semibold">Active Photo</span>
+                          <div className="flex flex-col gap-2 pt-1 border-t border-border/60">
+                            {/* Image Fit: Icon vs Cover */}
+                            <div className="flex flex-col gap-1">
+                              <span className="text-[10px] font-bold text-muted uppercase">Image Style on Wheel:</span>
+                              <div className="flex rounded-lg overflow-hidden border border-border text-[11px] font-semibold">
+                                <button
+                                  type="button"
+                                  onClick={() => updateSlotConfig(slot, { imageFit: 'icon' })}
+                                  className={`flex-1 py-1 transition-colors ${cfg.imageFit !== 'cover' ? 'bg-gold-700 text-bg font-bold' : 'bg-surface text-muted hover:text-white'}`}
+                                >
+                                  🔘 Icon (Like Emoji)
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => updateSlotConfig(slot, { imageFit: 'cover' })}
+                                  className={`flex-1 py-1 transition-colors ${cfg.imageFit === 'cover' ? 'bg-gold-700 text-bg font-bold' : 'bg-surface text-muted hover:text-white'}`}
+                                >
+                                  🍕 Cover Entire Face
+                                </button>
+                              </div>
                             </div>
-                            <button
-                              type="button"
-                              onClick={() => updateSlotConfig(slot, { iconType: 'none', iconValue: '' })}
-                              className="text-xs text-red-400 hover:text-red-200"
-                            >
-                              Remove
-                            </button>
+
+                            {/* Flash Duration Settings */}
+                            <div className="flex items-center justify-between p-2 rounded-lg bg-surface2 border border-border">
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-[11px] font-bold text-gold-400">⚡ Flash on Roll:</span>
+                                <input
+                                  type="number"
+                                  min="1"
+                                  max="15"
+                                  value={cfg.flashDuration ?? 3}
+                                  onChange={(e) => updateSlotConfig(slot, { flashDuration: Math.max(1, Math.min(15, parseInt(e.target.value, 10) || 3)) })}
+                                  className="w-10 text-center bg-surface border border-border rounded text-xs font-bold text-white py-0.5 outline-none"
+                                />
+                                <span className="text-[11px] text-muted font-bold">sec</span>
+                              </div>
+
+                              {/* Test Flash Button */}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const dur = cfg.flashDuration ?? 3;
+                                  setFlashState({
+                                    imageSrc: cfg.iconValue!,
+                                    label: cfg.label || `Face ${slot}`,
+                                    slot,
+                                    duration: dur,
+                                  });
+                                  if (flashTimerRef.current) clearTimeout(flashTimerRef.current);
+                                  flashTimerRef.current = setTimeout(() => {
+                                    setFlashState(null);
+                                  }, dur * 1000);
+                                }}
+                                className="text-[10px] font-bold px-2 py-1 rounded bg-gold-900/40 text-gold-300 border border-gold-600/50 hover:bg-gold-800/50 transition-colors"
+                              >
+                                ▶ Test Flash
+                              </button>
+                            </div>
+
+                            {/* Active Image Thumbnail preview with remove */}
+                            <div className="flex items-center justify-between p-1.5 bg-surface2 border border-border rounded-lg">
+                              <div className="flex items-center gap-2">
+                                <img src={cfg.iconValue} alt="" className="w-7 h-7 rounded object-cover border border-white/40" />
+                                <span className="text-xs text-white font-semibold">Active Photo/GIF</span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => updateSlotConfig(slot, { iconType: 'none', iconValue: '' })}
+                                className="text-xs text-red-400 hover:text-red-200 font-semibold"
+                              >
+                                Remove
+                              </button>
+                            </div>
                           </div>
                         )}
                       </div>
@@ -1278,6 +1466,85 @@ export function SpinWheelRoller({ onResult, rollMode = 'normal' }: SpinWheelRoll
         </div>
       )}
 
+      {/* ── Full-Screen Cinematic Background Flash Overlay ── */}
+      <AnimatePresence>
+        {flashState && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.35 }}
+            className="fixed inset-0 z-[200] flex items-center justify-center overflow-hidden cursor-pointer"
+            onClick={() => setFlashState(null)}
+            title="Click anywhere to dismiss"
+          >
+            {/* Background Layer: Image / GIF covering the whole viewport */}
+            <motion.div
+              initial={{ scale: 1.15, opacity: 0.3 }}
+              animate={{ scale: 1, opacity: 0.75 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: flashState.duration, ease: 'easeOut' }}
+              className="absolute inset-0 bg-cover bg-center"
+              style={{
+                backgroundImage: `url(${flashState.imageSrc})`,
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
+                filter: 'brightness(0.65) saturate(1.2)',
+              }}
+            />
+
+            {/* Radial dark vignette to frame the center */}
+            <div 
+              className="absolute inset-0 pointer-events-none"
+              style={{
+                background: 'radial-gradient(circle at center, rgba(0,0,0,0.2) 0%, rgba(7,7,12,0.85) 75%, rgba(5,5,10,0.98) 100%)',
+              }}
+            />
+
+            {/* Glowing border pulse */}
+            <div className="absolute inset-0 border-[6px] border-gold-400/50 pointer-events-none animate-pulse" />
+
+            {/* Hero Victory Card */}
+            <motion.div
+              initial={{ scale: 0.7, y: 30, opacity: 0 }}
+              animate={{ scale: 1, y: 0, opacity: 1 }}
+              exit={{ scale: 0.85, opacity: 0 }}
+              transition={{ type: 'spring', bounce: 0.4 }}
+              className="relative z-10 flex flex-col items-center gap-3 p-6 sm:p-8 rounded-3xl bg-surface/90 backdrop-blur-xl border-4 border-gold-400 shadow-[0_0_80px_rgba(201,168,76,0.9)] max-w-sm sm:max-w-md mx-4 text-center"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <span className="text-xs font-bold uppercase tracking-widest text-gold-400">
+                ⚡ Face {flashState.slot} Landed!
+              </span>
+
+              {/* Center Frame for Animated GIF / Image */}
+              <div className="w-52 h-52 sm:w-64 sm:h-64 rounded-2xl overflow-hidden border-2 border-gold-300 shadow-2xl bg-black/60 flex items-center justify-center">
+                <img
+                  src={flashState.imageSrc}
+                  alt=""
+                  className="w-full h-full object-contain"
+                />
+              </div>
+
+              <h2 className="font-display font-black text-2xl sm:text-3xl text-white drop-shadow">
+                {flashState.label}
+              </h2>
+
+              {/* Timer status & Dismiss button */}
+              <div className="flex items-center gap-3 mt-1">
+                <button
+                  type="button"
+                  onClick={() => setFlashState(null)}
+                  className="btn-gold text-xs py-1.5 px-4 font-bold"
+                >
+                  Dismiss ({flashState.duration}s)
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Double Wheel Popup Overlay for Advantage / Disadvantage */}
       <AnimatePresence>
         {doubleWheelPopup !== null && (
@@ -1301,6 +1568,7 @@ export function SpinWheelRoller({ onResult, rollMode = 'normal' }: SpinWheelRoll
                   numSlots={numSlots}
                   arrowControls={arrowControls}
                   slotConfigs={slotConfigs}
+                  idPrefix={`${wheelUniqueId}-adv1`}
                   size={300}
                 />
               </div>
@@ -1312,6 +1580,7 @@ export function SpinWheelRoller({ onResult, rollMode = 'normal' }: SpinWheelRoll
                   numSlots={numSlots}
                   arrowControls={arrowControls2}
                   slotConfigs={slotConfigs}
+                  idPrefix={`${wheelUniqueId}-adv2`}
                   size={300}
                 />
               </div>
